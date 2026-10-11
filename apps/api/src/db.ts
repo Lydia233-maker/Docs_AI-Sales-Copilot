@@ -135,9 +135,17 @@ function ensureProfileTables() {
       | undefined;
     return Boolean(row && !row.sql.includes('CHECK'));
   });
-  if (outdated) {
+  const factsRow = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'facts'").get() as
+    | { sql: string }
+    | undefined;
+  const factsNeedKind = Boolean(factsRow && !factsRow.sql.includes("'unclassified'"));
+  if (outdated || factsNeedKind) {
     db.pragma('foreign_keys = OFF');
-    for (const name of PROFILE_TABLES) db.exec(`DROP TABLE IF EXISTS ${name}`);
+    if (outdated) {
+      for (const name of PROFILE_TABLES) db.exec(`DROP TABLE IF EXISTS ${name}`);
+    } else {
+      db.exec('DROP TABLE IF EXISTS facts');
+    }
     db.pragma('foreign_keys = ON');
   }
   db.exec(`
@@ -160,7 +168,7 @@ CREATE TABLE IF NOT EXISTS facts (
   id TEXT PRIMARY KEY,
   store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
   customer_id TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
-  kind TEXT NOT NULL CHECK (kind IN ('preference', 'caution')),
+  kind TEXT NOT NULL CHECK (kind IN ('preference', 'caution', 'unclassified')),
   status TEXT NOT NULL CHECK (status IN ('suggested', 'confirmed')),
   source TEXT NOT NULL CHECK (source IN ('note', 'title', 'gorgias')),
   quote TEXT NOT NULL CHECK (length(trim(quote)) > 0),
@@ -182,6 +190,14 @@ CREATE TABLE IF NOT EXISTS generation_jobs (
 }
 
 ensureProfileTables();
+
+const draftColumns = new Set(
+  (db.prepare('PRAGMA table_info(drafts)').all() as { name: string }[]).map((column) => column.name),
+);
+if (!draftColumns.has('writer')) db.exec('ALTER TABLE drafts ADD COLUMN writer TEXT');
+if (!draftColumns.has('generation_ok')) {
+  db.exec('ALTER TABLE drafts ADD COLUMN generation_ok INTEGER NOT NULL DEFAULT 1');
+}
 
 db.exec(`
 CREATE TRIGGER IF NOT EXISTS stores_company_address_insert

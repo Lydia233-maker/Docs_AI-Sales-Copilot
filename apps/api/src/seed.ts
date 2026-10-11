@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { appToday, db, nowIso, uuid } from './db.ts';
+import { applyAbandoned } from './imports/abandoned.ts';
+import { syncStoreFacts } from './facts/sync.ts';
 import {
   categoryOf,
   daysBetween,
@@ -156,6 +158,9 @@ for (const note of notes) {
   const row = findCustomer.get(storeId, note.customerExternalId) as { id: string } | undefined;
   if (row) insertNote.run(uuid(), storeId, row.id, note.text, created);
 }
+
+applyAbandoned(storeId, readFileSync(join(fixtureDir, 'abandoned.csv'), 'utf8'));
+syncStoreFacts(storeId);
 
 const summary = db.prepare('SELECT COUNT(*) AS n FROM customers').get() as { n: number };
 const today = appToday();

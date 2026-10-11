@@ -15,15 +15,18 @@ const brief = {
 
 test('spanish template uses product and required placeholders', () => {
   const copy = generateTemplate(brief, '黑五老客专享 8 折', 'SAVE20');
-  assert.match(copy.body, /Arena sin polvo 10L|{{last_product}}/);
+  assert.match(copy.body, /Arena sin polvo 10L/);
+  assert.equal(copy.body.includes('黑五老客专享 8 折'), false);
+  assert.match(copy.body, /20% de descuento/);
   assert.equal(checkDraft(copy.body).length, 0);
-  assert.match(copy.zhBody, /无尘猫砂|黑五/);
+  assert.match(copy.zhBody, /无尘猫砂/);
 });
 
-test('preference tags show up in the Chinese copy and the customization notes', () => {
-  const copy = generateTemplate({ ...brief, preferenceTags: ['布偶猫', '无尘猫砂'] }, '黑五老客专享 8 折');
-  assert.match(copy.zhBody, /偏好：布偶猫、无尘猫砂/);
-  assert.ok(copy.points.some((point) => point.includes('布偶猫') && point.includes('无尘猫砂')));
+test('confirmed facts show up in the Chinese copy and the customization notes', () => {
+  const copy = generateTemplate(brief, '黑五老客专享 8 折');
+  assert.match(copy.zhBody, /喜欢无尘猫砂/);
+  assert.equal(copy.body.includes('喜欢无尘猫砂'), false);
+  assert.ok(copy.points.some((point) => point.includes('喜欢无尘猫砂')));
 });
 
 test('missing unsubscribe is blocking', () => {

@@ -33,6 +33,28 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ customersCsv, ordersCsv }),
     }),
+  previewAbandoned: (abandonedCsv: string) =>
+    request<AbandonedPreview>('/api/v1/imports/abandoned/preview', {
+      method: 'POST',
+      body: JSON.stringify({ abandonedCsv }),
+    }),
+  confirmAbandoned: (abandonedCsv: string) =>
+    request<{ checkouts: number; matched: number; unmatched: number }>('/api/v1/imports/abandoned', {
+      method: 'POST',
+      body: JSON.stringify({ abandonedCsv }),
+    }),
+  previewGorgias: (csv: string) =>
+    request<GorgiasPreview>('/api/v1/imports/gorgias/preview', { method: 'POST', body: JSON.stringify({ csv }) }),
+  confirmGorgias: (csv: string) =>
+    request<{ matched: number; unmatched: number; skipped: number; created: number }>('/api/v1/imports/gorgias', {
+      method: 'POST',
+      body: JSON.stringify({ csv }),
+    }),
+  decideFact: (id: string, decision: 'confirm' | 'dismiss') =>
+    request<{ status: string }>(`/api/v1/facts/${id}/decision`, {
+      method: 'POST',
+      body: JSON.stringify({ decision }),
+    }),
   customer: (id: string) => request<CustomerDetail>(`/api/v1/customers/${id}`),
   updateLanguage: (id: string, language: 'en' | 'es') =>
     request<Customer>(`/api/v1/customers/${id}/language`, {
@@ -61,10 +83,12 @@ export const api = {
   listOutreach: () => request<{ items: OutreachListItem[]; total: number }>('/api/v1/outreach'),
   getOutreach: (id: string) => request<Outreach>(`/api/v1/outreach/${id}`),
   generate: (id: string) => request<Outreach>(`/api/v1/outreach/${id}/generate`, { method: 'POST' }),
+  continueGeneration: (id: string) => request<Outreach>(`/api/v1/outreach/${id}/continue`, { method: 'POST' }),
+  regenerateDraft: (id: string) => request<Draft>(`/api/v1/drafts/${id}/regenerate`, { method: 'POST' }),
   updateDraft: (id: string, body: string) =>
     request<Draft>(`/api/v1/drafts/${id}`, { method: 'PATCH', body: JSON.stringify({ body }) }),
-  reviewDraft: (id: string, decision: 'approve' | 'reject') =>
-    request<Draft>(`/api/v1/drafts/${id}/review`, { method: 'POST', body: JSON.stringify({ decision }) }),
+  reviewDraft: (id: string) =>
+    request<Draft>(`/api/v1/drafts/${id}/review`, { method: 'POST', body: JSON.stringify({ decision: 'approve' }) }),
   bulkApprove: (id: string) =>
     request<{ approved: number; skipped: number } & Outreach>(`/api/v1/outreach/${id}/drafts/bulk-approve`, {
       method: 'POST',
@@ -103,9 +127,43 @@ export type Customer = {
   daysSinceLastOrder: number | null;
 };
 
+export type Fact = {
+  id: string;
+  kind: string;
+  status: string;
+  source: string;
+  quote: string;
+};
+
 export type CustomerDetail = Customer & {
   notes: { id: string; text: string }[];
   orders: { id: string; name: string; createdAtShop: string; totalCents: number }[];
+  facts: Fact[];
+};
+
+export type AbandonedPreview = {
+  rows: number;
+  checkouts: number;
+  matched: number;
+  unmatched: number;
+  storeCheckouts: number;
+};
+
+export type GorgiasPreview = {
+  rows: number;
+  withText: number;
+  matched: number;
+  unmatched: number;
+  skipped: number;
+};
+
+export type GenerationJob = {
+  status: 'writing' | 'done' | 'interrupted';
+  plannedCount: number;
+  completedCount: number;
+  failedCount: number;
+  nextCustomerName: string | null;
+  failedCountLabel?: string;
 };
 
 export type OutreachListItem = {
@@ -114,15 +172,35 @@ export type OutreachListItem = {
   intentZh: string;
   status: string;
   createdAt: string;
+  job: GenerationJob | null;
+};
+
+export type AudienceItem = {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string;
+  language: string;
+  eligible: boolean;
+  topCategory: string | null;
+  spendTier: string;
 };
 
 export type Preview = {
-  total: number;
-  reachable: number;
+  missingAbandoned?: boolean;
+  message?: string;
+  total: number | null;
+  reachable: number | null;
   excluded: number;
   languages: { en: number; es: number };
   personalized: number;
   cohort: number;
+  cohortGroups: number;
+  calls: number;
+  unitPriceCents: number | null;
+  costCents: number | null;
+  costConfigured: boolean;
+  items: AudienceItem[];
 };
 
 export type Draft = {
@@ -138,6 +216,7 @@ export type Draft = {
   zhSubject: string;
   zhBody: string;
   personalizationPoints: string[];
+  writer?: string | null;
   status: string;
   issues: { level: string; message: string }[];
   canApprove: boolean;
@@ -152,4 +231,5 @@ export type Outreach = {
   exclusionReasons: Record<string, number>;
   drafts: Draft[];
   status: string;
+  job: GenerationJob | null;
 };

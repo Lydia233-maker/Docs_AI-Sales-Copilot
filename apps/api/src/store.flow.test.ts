@@ -168,7 +168,14 @@ test('language override survives reimport and copy uses the saved company addres
     headers,
   });
   assert.equal(generated.statusCode, 200);
-  const draft = generated.json().drafts.find((item: { email: string }) => item.email === 'anna.cole@example.com');
+  let finished = generated.json();
+  const waitStarted = Date.now();
+  while (finished.job?.status !== 'done') {
+    if (Date.now() - waitStarted > 10000) throw new Error('generation did not finish');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    finished = (await app.inject({ method: 'GET', url: `/api/v1/outreach/${outreachId}`, headers })).json();
+  }
+  const draft = finished.drafts.find((item: { email: string }) => item.email === 'anna.cole@example.com');
   assert.equal(draft.language, 'es');
   assert.equal(String(draft.body).includes('{{company_address}}'), true);
   assert.equal(String(draft.subject).startsWith('Te extrañamos'), true);

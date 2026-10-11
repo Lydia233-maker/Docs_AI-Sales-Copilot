@@ -112,10 +112,11 @@ test('audience scenario allows only the four scenes', () => {
   assert.equal(AudienceScenarioSchema.safeParse('holiday').success, false);
 });
 
-test('current preview page keeps the legacy scenario pair', () => {
-  assert.equal(PreviewAudienceBody.safeParse({ scenario: 'all' }).success, true);
+test('preview and create use the four audience scenes', () => {
   assert.equal(PreviewAudienceBody.safeParse({ scenario: 'winback_dormant' }).success, true);
-  assert.equal(PreviewAudienceBody.safeParse({ scenario: 'repurchase' }).success, false);
+  assert.equal(PreviewAudienceBody.safeParse({ scenario: 'repurchase' }).success, true);
+  assert.equal(PreviewAudienceBody.safeParse({ scenario: 'all' }).success, false);
+  assert.equal(PreviewAudienceBody.safeParse({ scenario: 'winback_dormant', email: 'a@example.com' }).success, false);
 });
 
 test('fact, language, and address bodies', () => {

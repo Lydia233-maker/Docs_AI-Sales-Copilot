@@ -57,6 +57,10 @@ test('login through simulated send uses the shared brief and draft rules', async
     '联系 ann@example.com，喜欢无尘猫砂',
     now,
   );
+  db.prepare(
+    `INSERT INTO facts (id, store_id, customer_id, kind, status, source, quote, created_at)
+     VALUES (?, ?, ?, 'preference', 'confirmed', 'note', ?, ?)`,
+  ).run(uuid(), storeId, customerId, '联系 [已隐藏]，喜欢无尘猫砂', now);
 
   const app = await buildApp();
   await app.ready();
@@ -93,13 +97,23 @@ test('login through simulated send uses the shared brief and draft rules', async
   assert.equal(created.statusCode, 200);
   const outreachId = created.json().id as string;
 
+  const startedAt = Date.now();
   const generated = await app.inject({
     method: 'POST',
     url: `/api/v1/outreach/${outreachId}/generate`,
     headers: { cookie },
   });
   assert.equal(generated.statusCode, 200);
-  const draft = generated.json().drafts[0];
+  assert.ok(Date.now() - startedAt < 2000);
+  let draft = generated.json().drafts[0];
+  const waitStarted = Date.now();
+  while (!draft) {
+    if (Date.now() - waitStarted > 10000) throw new Error('generation did not finish');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const again = await app.inject({ method: 'GET', url: `/api/v1/outreach/${outreachId}`, headers: { cookie } });
+    draft = again.json().drafts[0];
+    if (again.json().job?.status === 'done') draft = again.json().drafts[0];
+  }
   assert.equal(draft.email, 'anna.cole@example.com');
   assert.equal(String(draft.zhBody).includes('ann@example.com'), false);
   assert.equal(String(draft.zhBody).includes('[已隐藏]'), true);

@@ -6,10 +6,13 @@ import {
   type Customer,
   type CustomerDetail,
   type ImportPreview,
+  type AbandonedPreview,
+  type GorgiasPreview,
   type Draft,
   type Outreach,
   type OutreachListItem,
   type Preview,
+  type GenerationJob,
 } from './api';
 
 function useAuth() {
@@ -159,13 +162,11 @@ function CustomersPage() {
 function CustomerPage() {
   const { id } = useParams();
   const [data, setData] = useState<CustomerDetail | null>(null);
-  const [text, setText] = useState('');
-  const [tag, setTag] = useState('');
-  const [tagError, setTagError] = useState('');
-  const [noteError, setNoteError] = useState('');
-  const [warn, setWarn] = useState<string[]>([]);
   const [languageError, setLanguageError] = useState('');
-  const load = () => id && api.customer(id).then(setData);
+  const load = async () => {
+    if (!id) return;
+    setData(await api.customer(id));
+  };
   useEffect(() => {
     load();
   }, [id]);
@@ -231,59 +232,8 @@ function CustomerPage() {
               <th>营销同意</th>
               <td>{data.emailConsent ? '同意接收邮件' : '未同意，不会生成文案'}</td>
             </tr>
-            <tr>
-              <th>偏好标签</th>
-              <td>
-                {(data.preferenceTags || []).length === 0
-                  ? '还没有'
-                  : data.preferenceTags.map((item) => (
-                      <span key={item} className="tag">
-                        {item}
-                      </span>
-                    ))}
-              </td>
-            </tr>
           </tbody>
         </table>
-        <label>添加偏好标签</label>
-        <div className="row">
-          <input
-            value={tag}
-            onChange={(e) => {
-              setTag(e.target.value);
-              setTagError('');
-            }}
-            placeholder="例如：布偶猫"
-          />
-          <button
-            className="btn"
-            onClick={async () => {
-              const value = tag.trim();
-              if (!id || !value) {
-                setTagError('标签不能为空');
-                return;
-              }
-              if (value.length > 40) {
-                setTagError('标签最多 40 个字');
-                return;
-              }
-              try {
-                await api.addTag(id, value);
-                setTag('');
-                setTagError('');
-                load();
-              } catch (err) {
-                const message = err instanceof Error ? err.message : '';
-                setTagError(
-                  message.includes('标签') ? message : '网络失败，标签没有保存。请确认后端已启动后再试。',
-                );
-              }
-            }}
-          >
-            添加标签
-          </button>
-        </div>
-        {tagError && <p className="danger">{tagError}</p>}
       </div>
       <div className="card">
         <h3>订单</h3>
@@ -295,43 +245,44 @@ function CustomerPage() {
       </div>
       <div className="card">
         <h3>备注</h3>
+        {data.notes.length === 0 && <p className="muted">还没有备注</p>}
         {data.notes.map((n) => (
           <p key={n.id}>{n.text}</p>
         ))}
-        {warn.length > 0 && (
-          <p className="warn">备注中包含{warn.map(privacyLabel).join('、')}，发给 AI 前会自动隐藏</p>
-        )}
-        <textarea
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            setNoteError('');
-          }}
-          rows={3}
-        />
-        {noteError && <p className="danger">{noteError}</p>}
-        <p>
-          <button
-            className="btn"
-            onClick={async () => {
-              if (!id || !text.trim()) {
-                setNoteError('备注不能为空');
-                return;
-              }
-              try {
-                const res = await api.addNote(id, text);
-                setWarn(res.privacyWarnings);
-                setText('');
-                setNoteError('');
-                load();
-              } catch (err) {
-                setNoteError(err instanceof Error ? err.message : '备注没有保存。请确认后端已启动后再试。');
-              }
-            }}
-          >
-            添加备注
-          </button>
-        </p>
+      </div>
+      <div className="card">
+        <h3>事实</h3>
+        <p className="muted">只有已确认的事实会写进信。商品标题和聊天原话需要先确认。</p>
+        {(data.facts || []).length === 0 && <p className="muted">还没有事实</p>}
+        {(data.facts || []).map((fact) => (
+          <p key={fact.id}>
+            <span className="tag">{factStatus(fact.status)}</span>
+            <span className="tag">{factKind(fact.kind)}</span>
+            {fact.quote}
+            {fact.status === 'suggested' && (
+              <span className="row">
+                <button
+                  className="btn"
+                  onClick={async () => {
+                    await api.decideFact(fact.id, 'confirm');
+                    await load();
+                  }}
+                >
+                  确认
+                </button>
+                <button
+                  className="btn secondary"
+                  onClick={async () => {
+                    await api.decideFact(fact.id, 'dismiss');
+                    await load();
+                  }}
+                >
+                  忽略
+                </button>
+              </span>
+            )}
+          </p>
+        ))}
       </div>
     </div>
   );
@@ -489,37 +440,248 @@ function ImportPage() {
         {message && <p>{message}</p>}
         {error && <p className="danger">{error}</p>}
       </div>
+      <AbandonedImport />
+      <GorgiasImport />
+    </div>
+  );
+}
+
+function AbandonedImport() {
+  const [fileText, setFileText] = useState('');
+  const [preview, setPreview] = useState<AbandonedPreview | null>(null);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="card">
+      <h3>弃单 CSV</h3>
+      <p className="muted">
+        列名用 Shopify 弃单导出：Email、Created at、Lineitem name。同一张弃单的每一行商品共用一个 Id。还可以有 Name 和 Lineitem quantity。
+      </p>
+      <input
+        type="file"
+        accept=".csv,text/csv"
+        onChange={async (event) => {
+          const file = event.target.files?.[0];
+          setPreview(null);
+          setMessage('');
+          setFileText(file ? await file.text() : '');
+        }}
+      />
+      <p>
+        <button
+          className="btn secondary"
+          disabled={busy || !fileText}
+          onClick={async () => {
+            setBusy(true);
+            setError('');
+            try {
+              const before = await api.previewAbandoned(fileText);
+              const after = await api.previewAbandoned(fileText);
+              if (before.storeCheckouts !== after.storeCheckouts) {
+                setError('预览改动了弃单，请先不要确认。');
+                return;
+              }
+              setPreview(before);
+            } catch (err) {
+              setError(err instanceof Error ? err.message : '预览失败');
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          预览弃单
+        </button>
+      </p>
+      {preview && (
+        <div>
+          <p>
+            弃单 {preview.checkouts} 张，对得上客户 {preview.matched} 张，对不上 {preview.unmatched} 张。当前账本里的弃单还是{' '}
+            {preview.storeCheckouts} 张。
+          </p>
+          <button
+            className="btn"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              setError('');
+              try {
+                const saved = await api.confirmAbandoned(fileText);
+                setMessage(`已导入弃单 ${saved.checkouts} 张，对得上 ${saved.matched} 张，对不上 ${saved.unmatched} 张。`);
+                setPreview(null);
+              } catch (err) {
+                setError(err instanceof Error ? err.message : '导入失败');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            确认导入弃单
+          </button>
+        </div>
+      )}
+      {message && <p>{message}</p>}
+      {error && <p className="danger">{error}</p>}
+    </div>
+  );
+}
+
+function GorgiasImport() {
+  const [fileText, setFileText] = useState('');
+  const [preview, setPreview] = useState<GorgiasPreview | null>(null);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="card">
+      <h3>Gorgias 聊天</h3>
+      <p className="muted">
+        这一版只读「Export with message content」里的 Customer email 和 Message text。对不上客户的行不会挂到别人身上。没有 DeepSeek 钥匙时不猜测是偏好还是需要小心的事。
+      </p>
+      <input
+        type="file"
+        accept=".csv,text/csv"
+        onChange={async (event) => {
+          const file = event.target.files?.[0];
+          setPreview(null);
+          setMessage('');
+          setFileText(file ? await file.text() : '');
+        }}
+      />
+      <p>
+        <button
+          className="btn secondary"
+          disabled={busy || !fileText}
+          onClick={async () => {
+            setBusy(true);
+            setError('');
+            try {
+              setPreview(await api.previewGorgias(fileText));
+            } catch (err) {
+              setError(err instanceof Error ? err.message : '预览失败');
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          预览聊天
+        </button>
+      </p>
+      {preview && (
+        <div>
+          <p>
+            有正文 {preview.withText} 行，对得上 {preview.matched} 行，对不上 {preview.unmatched} 行，空正文 {preview.skipped} 行。
+          </p>
+          <button
+            className="btn"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              setError('');
+              try {
+                const saved = await api.confirmGorgias(fileText);
+                setMessage(`已导入。新事实 ${saved.created} 条，对不上 ${saved.unmatched} 行，空正文 ${saved.skipped} 行。`);
+                setPreview(null);
+              } catch (err) {
+                setError(err instanceof Error ? err.message : '导入失败');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            确认导入聊天
+          </button>
+        </div>
+      )}
+      {message && <p>{message}</p>}
+      {error && <p className="danger">{error}</p>}
     </div>
   );
 }
 
 function AudiencePage() {
   const nav = useNavigate();
-  const [scenario, setScenario] = useState<'winback_dormant' | 'all'>('winback_dormant');
+  const [scenario, setScenario] = useState<'winback_dormant' | 'repurchase' | 'first_to_second' | 'abandoned_checkout'>(
+    'winback_dormant',
+  );
+  const [language, setLanguage] = useState('');
+  const [category, setCategory] = useState('');
+  const [spendTier, setSpendTier] = useState('');
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [removed, setRemoved] = useState<string[]>([]);
   const [intent, setIntent] = useState('黑五老客专享 8 折，主推猫砂和猫粮，强调囤货划算');
   const [code, setCode] = useState('SAVE20');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const refresh = () => api.preview({ scenario }).then(setPreview);
   useEffect(() => {
-    refresh();
-  }, [scenario]);
+    setRemoved([]);
+    const body: Record<string, string> = { scenario };
+    if (language) body.language = language;
+    if (category) body.category = category;
+    if (spendTier) body.spendTier = spendTier;
+    api.preview(body).then(setPreview).catch((err) => setError(err instanceof Error ? err.message : '挑选失败'));
+  }, [scenario, language, category, spendTier]);
+  const chosen = (preview?.items || []).filter((item) => !removed.includes(item.id));
   return (
     <div>
       <h2>挑选客户</h2>
       <div className="card">
         <label>场景</label>
-        <select value={scenario} onChange={(e) => setScenario(e.target.value as 'winback_dormant' | 'all')}>
+        <select value={scenario} onChange={(e) => setScenario(e.target.value as typeof scenario)}>
           <option value="winback_dormant">沉睡召回（60 天以上未购买）</option>
-          <option value="all">全部客户</option>
+          <option value="repurchase">复购提醒</option>
+          <option value="first_to_second">首单转二单</option>
+          <option value="abandoned_checkout">弃购挽回</option>
         </select>
-        {preview && (
+        <div className="row">
+          <select value={language} onChange={(e) => setLanguage(e.target.value)}>
+            <option value="">全部语言</option>
+            <option value="en">英语</option>
+            <option value="es">西班牙语</option>
+          </select>
+          <select value={category} onChange={(e) => setCategory(e.target.value)}>
+            <option value="">全部品类</option>
+            <option value="cat_litter">猫砂</option>
+            <option value="cat_food">猫粮</option>
+            <option value="dog_food">狗粮</option>
+            <option value="treats">零食玩具</option>
+          </select>
+          <select value={spendTier} onChange={(e) => setSpendTier(e.target.value)}>
+            <option value="">全部消费层级</option>
+            <option value="high">高</option>
+            <option value="mid">中</option>
+            <option value="low">低</option>
+          </select>
+        </div>
+        {preview?.missingAbandoned && <p>还没有弃单数据</p>}
+        {preview && !preview.missingAbandoned && (
           <p>
             共 {preview.total} 人，可触达 {preview.reachable} 人，排除 {preview.excluded} 人（未同意营销）。英语{' '}
-            {preview.languages.en}，西班牙语 {preview.languages.es}。逐个定制 {preview.personalized}，小群方式{' '}
-            {preview.cohort}。
+            {preview.languages.en}，西班牙语 {preview.languages.es}。单独写 {preview.personalized} 人，共用{' '}
+            {preview.cohortGroups} 组，调用 {preview.calls} 次。
+            {preview.costConfigured
+              ? `单价 ${preview.unitPriceCents} 分，费用 ${preview.costCents} 分。`
+              : '费用还没配置。'}
           </p>
+        )}
+        {preview && !preview.missingAbandoned && (
+          <div style={{ maxHeight: 280, overflow: 'auto' }}>
+            {preview.items.map((item) => (
+              <label key={item.id} style={{ display: 'block' }}>
+                <input
+                  type="checkbox"
+                  checked={!removed.includes(item.id)}
+                  onChange={() =>
+                    setRemoved((current) =>
+                      current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id],
+                    )
+                  }
+                />{' '}
+                {item.firstName} {item.lastName}
+                {item.eligible ? '' : ' · 不生成'}
+              </label>
+            ))}
+          </div>
         )}
         <label>推广意图（中文）</label>
         <textarea value={intent} onChange={(e) => setIntent(e.target.value)} rows={3} />
@@ -528,7 +690,7 @@ function AudiencePage() {
         <p>
           <button
             className="btn"
-            disabled={busy || !intent.trim()}
+            disabled={busy || !intent.trim() || preview?.missingAbandoned || chosen.length === 0}
             onClick={async () => {
               setBusy(true);
               setError('');
@@ -537,9 +699,13 @@ function AudiencePage() {
                   scenario,
                   intentZh: intent.trim(),
                   discountCode: code.trim(),
+                  customerIds: chosen.map((item) => item.id),
+                  ...(language ? { language } : {}),
+                  ...(category ? { category } : {}),
+                  ...(spendTier ? { spendTier } : {}),
                 });
-                const generated = await api.generate(created.id);
-                nav(`/outreach/${generated.id}`);
+                await api.generate(created.id);
+                nav(`/outreach/${created.id}`);
               } catch (err) {
                 setError(err instanceof Error ? err.message : '生成失败。请确认后端已启动后再试。');
               } finally {
@@ -547,7 +713,7 @@ function AudiencePage() {
               }
             }}
           >
-            {busy ? '正在为客户生成文案…' : '开始生成'}
+            {busy ? '正在开始写信…' : '开始生成'}
           </button>
         </p>
         {error && <p className="danger">{error}</p>}
@@ -575,7 +741,7 @@ function OutreachListPage() {
             <Link to={`/outreach/${item.id}`}>{item.name}</Link>
             <span className="muted">
               {' '}
-              · {statusLabel(item.status)} · {item.intentZh}
+              · {progressLabel(item.status, item.job)} · {item.intentZh}
             </span>
           </p>
         ))}
@@ -593,25 +759,52 @@ function OutreachPage() {
   const [copied, setCopied] = useState('');
   const [rendered, setRendered] = useState<{ subject: string; body: string } | null>(null);
   const [message, setMessage] = useState('');
+  const currentId = current?.id;
   const load = () =>
     id &&
     api.getOutreach(id).then((d) => {
       setData(d);
-      const next = d.drafts.find((x) => x.id === current?.id) || d.drafts[0] || null;
+      const next = d.drafts.find((x) => x.id === currentId) || d.drafts[0] || null;
       setCurrent(next);
-      setBody(next?.body || '');
+      if (!currentId || next?.id !== currentId) setBody(next?.body || '');
     });
   useEffect(() => {
-    load();
+    if (!id) return;
+    let timer = 0;
+    let stop = false;
+    const tick = () => {
+      api.getOutreach(id).then((d) => {
+        if (stop) return;
+        setData(d);
+        setCurrent((prev) => {
+          const next = d.drafts.find((item) => item.id === prev?.id) || d.drafts[0] || null;
+          if (!prev || prev.id !== next?.id) setBody(next?.body || '');
+          return next;
+        });
+        if (d.job?.status === 'writing') timer = window.setTimeout(tick, 800);
+      });
+    };
+    tick();
+    return () => {
+      stop = true;
+      window.clearTimeout(timer);
+    };
   }, [id]);
   if (!data) return <p>加载中…</p>;
   return (
     <div>
       <h2>
-        {data.name} · {statusLabel(data.status)}
+        {data.name} · {progressLabel(data.status, data.job)}
       </h2>
       <p className="muted">{data.intentZh}</p>
       <div className="banner">模拟发送 · 可触达 {data.reachable} · 排除 {data.excluded}</div>
+      {data.job && (
+        <div className="banner">
+          计划 {data.job.plannedCount} 封，已写完 {data.job.completedCount} 封
+          {data.job.nextCustomerName ? `，还没写的从 ${data.job.nextCustomerName} 开始` : ''}，失败 {data.job.failedCount}{' '}
+          封
+        </div>
+      )}
       <div className="row">
         <button
           className="btn"
@@ -635,6 +828,19 @@ function OutreachPage() {
         >
           模拟发送
         </button>
+        {data.job && data.job.status !== 'writing' && (data.job.status === 'interrupted' || data.job.failedCount > 0 || data.job.completedCount < data.job.plannedCount) && (
+          <button
+            className="btn secondary"
+            onClick={async () => {
+              if (!id) return;
+              await api.continueGeneration(id);
+              setMessage('继续写剩下的');
+              load();
+            }}
+          >
+            继续写剩下的
+          </button>
+        )}
       </div>
       {message && <p>{message}</p>}
       <div className="split" style={{ marginTop: 16 }}>
@@ -705,7 +911,7 @@ function OutreachPage() {
                 onClick={async () => {
                   try {
                     await api.updateDraft(current.id, body);
-                    await api.reviewDraft(current.id, 'approve');
+                    await api.reviewDraft(current.id);
                     setMessage('这份文案已通过');
                     load();
                   } catch (err) {
@@ -714,6 +920,21 @@ function OutreachPage() {
                 }}
               >
                 {current.status === 'approved' ? '已通过' : '通过'}
+              </button>
+              <button
+                className="btn secondary"
+                onClick={async () => {
+                  try {
+                    const next = await api.regenerateDraft(current.id);
+                    setMessage(next.writer === 'template' ? '这一封已用信纸重写' : '这一封已重新生成');
+                    setBody(next.body);
+                    load();
+                  } catch (err) {
+                    setMessage(err instanceof Error ? err.message : '无法重写');
+                  }
+                }}
+              >
+                重新生成这一封
               </button>
               <button
                 className="btn secondary"
@@ -774,10 +995,23 @@ function statusLabel(status: string) {
   return status;
 }
 
-function privacyLabel(code: string) {
-  if (code === 'email') return '邮箱';
-  if (code === 'phone') return '电话';
-  return code;
+function factStatus(status: string) {
+  if (status === 'confirmed') return '已确认';
+  return '待确认';
+}
+
+function factKind(kind: string) {
+  if (kind === 'caution') return '需要小心的事';
+  if (kind === 'preference') return '偏好';
+  return '还没分类';
+}
+
+function progressLabel(status: string, job: GenerationJob | null) {
+  if (status === 'sent') return '已发送';
+  if (job?.status === 'writing') return '正在写';
+  if (job?.status === 'done') return '已写完';
+  if (job?.status === 'interrupted') return '中途停下';
+  return statusLabel(status);
 }
 
 function Guard({ children }: { children: ReactNode }) {

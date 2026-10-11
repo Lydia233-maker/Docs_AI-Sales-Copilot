@@ -7,6 +7,7 @@ import {
   moneyToCents,
   parseCsv,
 } from '../csv.ts';
+import { syncCustomerFacts } from '../facts/sync.ts';
 import { redactNote } from '../templates.ts';
 
 export type CustomerOrderPreview = {
@@ -264,6 +265,7 @@ export function applyCustomerOrders(storeId: string, customersCsv: string, order
       }
       const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
       updateProfile.run(orders.length, spent, orders[0]?.created_at_shop ?? null, spendTier(spent), top, customerId);
+      syncCustomerFacts(storeId, customerId);
     }
 
     const spanish = db.prepare("SELECT COUNT(*) AS n FROM customers WHERE store_id=? AND language='es'").get(storeId) as {

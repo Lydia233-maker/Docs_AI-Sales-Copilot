@@ -3,10 +3,6 @@ import { z } from 'zod';
 export const LANGUAGES = ['en', 'es'] as const;
 export type Language = (typeof LANGUAGES)[number];
 
-// 当前挑选页仍用这一组，含「全部」。四个新场景见 AUDIENCE_SCENARIOS，接上页面前不要互换。
-export const SCENARIOS = ['winback_dormant', 'all'] as const;
-export type Scenario = (typeof SCENARIOS)[number];
-
 export const AUDIENCE_SCENARIOS = [
   'winback_dormant',
   'repurchase',
@@ -14,6 +10,8 @@ export const AUDIENCE_SCENARIOS = [
   'abandoned_checkout',
 ] as const;
 export type AudienceScenario = (typeof AUDIENCE_SCENARIOS)[number];
+export const SCENARIOS = AUDIENCE_SCENARIOS;
+export type Scenario = AudienceScenario;
 
 export const AudienceScenarioSchema = z.enum(AUDIENCE_SCENARIOS);
 
@@ -136,24 +134,50 @@ export const ImportCustomerOrdersBody = z
   })
   .strict();
 
-export const PreviewAudienceBody = z.object({
-  scenario: z.enum(SCENARIOS),
-  language: z.enum(LANGUAGES).optional(),
-  hasNotes: z.boolean().optional(),
-});
+export const CATEGORIES = ['cat_litter', 'cat_food', 'dog_food', 'treats'] as const;
+export const SPEND_TIERS = ['high', 'mid', 'low'] as const;
 
-export const CreateOutreachBody = z.object({
-  name: z.string().trim().min(1).max(80).optional(),
-  intentZh: z.string().trim().min(1, '请填写推广意图'),
-  scenario: z.enum(SCENARIOS),
-  language: z.enum(LANGUAGES).optional(),
-  hasNotes: z.boolean().optional(),
-  discountCode: z.string().trim().optional(),
-});
+export const PreviewAudienceBody = z
+  .object({
+    scenario: z.enum(AUDIENCE_SCENARIOS),
+    language: z.enum(LANGUAGES).optional(),
+    category: z.enum(CATEGORIES).optional(),
+    spendTier: z.enum(SPEND_TIERS).optional(),
+    hasNotes: z.boolean().optional(),
+  })
+  .strict();
 
-export const ReviewDraftBody = z.object({
-  decision: z.enum(['approve', 'reject']),
-});
+export const CreateOutreachBody = z
+  .object({
+    name: z.string().trim().min(1).max(80).optional(),
+    intentZh: z.string().trim().min(1, '请填写推广意图'),
+    scenario: z.enum(AUDIENCE_SCENARIOS),
+    language: z.enum(LANGUAGES).optional(),
+    category: z.enum(CATEGORIES).optional(),
+    spendTier: z.enum(SPEND_TIERS).optional(),
+    hasNotes: z.boolean().optional(),
+    customerIds: z.array(z.string()).optional(),
+    discountCode: z.string().trim().optional(),
+  })
+  .strict();
+
+export const ReviewDraftBody = z
+  .object({
+    decision: z.enum(['approve']),
+  })
+  .strict();
+
+export const ImportAbandonedBody = z
+  .object({
+    abandonedCsv: z.string().min(1, '请上传弃单 CSV'),
+  })
+  .strict();
+
+export const ImportGorgiasBody = z
+  .object({
+    csv: z.string().min(1, '请上传 Gorgias CSV'),
+  })
+  .strict();
 
 export const UpdateDraftBody = z.object({
   subject: z.string().optional(),
