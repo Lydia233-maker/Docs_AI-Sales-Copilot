@@ -8,6 +8,7 @@ import {
   UpdateCompanyAddressBody,
   UpdateLanguageBody,
   extractPlaceholders,
+  draftIssues,
   isAllowedPlaceholder,
   redactContact,
 } from './index.ts';
@@ -19,6 +20,11 @@ test('placeholder whitelist', () => {
     'first_name',
     'discount_code',
   ]);
+  const issues = draftIssues('Hi {{first_name}} {{not_a_field}}');
+  assert.equal(issues.some((issue) => issue.message.includes('退订')), true);
+  assert.equal(issues.some((issue) => issue.message.includes('公司地址')), true);
+  assert.equal(issues.some((issue) => issue.message.includes('not_a_field')), true);
+  assert.equal(draftIssues('Hi {{first_name}}\n{{unsubscribe_url}}\n{{company_address}}').length, 0);
 });
 
 test('customer brief rejects personal fields', () => {

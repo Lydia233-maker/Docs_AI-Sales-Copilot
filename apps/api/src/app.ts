@@ -6,6 +6,7 @@ import {
   AddNoteBody,
   AddPreferenceTagBody,
   CreateOutreachBody,
+  CustomerBriefSchema,
   ErrorCodes,
   LoginBody,
   PreviewAudienceBody,
@@ -19,6 +20,8 @@ import { exclusionReason, isEmailEligible } from './eligibility.ts';
 import { checkDraft, detectPrivacy, generateTemplate, redactNote, renderCopy } from './templates.ts';
 
 type Authed = { userId: string; storeId: string };
+
+class BriefRejected extends Error {}
 
 function verifyPassword(password: string, stored: string) {
   const [salt, hash] = stored.split(':');
@@ -453,46 +456,57 @@ export async function buildApp() {
     if (recipients.length === 0) {
       return reply.code(409).send(errorBody(ErrorCodes.NO_ELIGIBLE_RECIPIENTS, '没有可发送的客户'));
     }
-    db.prepare('DELETE FROM drafts WHERE outreach_id=?').run(outreach.id);
     const insert = db.prepare(
       `INSERT INTO drafts (id, outreach_id, recipient_id, customer_id, language, mode, subject, body, zh_subject, zh_body, personalization_points, status, last_product)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready', ?)`,
     );
-    for (const recipient of recipients) {
-      const customer = db.prepare('SELECT * FROM customers WHERE id=?').get(recipient.customer_id) as CustomerRow;
-      const purchases = customerPurchases(customer.id).map((p) => ({
-        title: p.title,
-        category: p.category,
-        daysAgo: daysBetween(p.created_at_shop, appToday()),
-      }));
-      const notes = notesOf(customer.id).slice(0, 5).map((n) => redactNote(n.text));
-      const brief = {
-        language: customer.language as 'en' | 'es',
-        country: customer.country || '',
-        orderCount: customer.order_count,
-        spendTier: customer.spend_tier,
-        daysSinceLastOrder: customer.last_order_at ? daysBetween(customer.last_order_at, appToday()) : null,
-        purchases,
-        preferenceTags: JSON.parse(customer.preference_tags || '[]'),
-        notes,
-      };
-      const copy = generateTemplate(brief, outreach.intentZh, outreach.discountCode || undefined);
-      insert.run(
-        uuid(),
-        outreach.id,
-        recipient.id,
-        customer.id,
-        customer.language,
-        recipient.mode,
-        copy.subject,
-        copy.body,
-        copy.zhSubject,
-        copy.zhBody,
-        JSON.stringify(copy.points),
-        purchases[0]?.title || '',
-      );
+    const writeDrafts = db.transaction(() => {
+      db.prepare('DELETE FROM drafts WHERE outreach_id=?').run(outreach.id);
+      for (const recipient of recipients) {
+        const customer = db.prepare('SELECT * FROM customers WHERE id=?').get(recipient.customer_id) as CustomerRow;
+        const purchases = customerPurchases(customer.id).map((p) => ({
+          title: p.title,
+          category: p.category,
+          daysAgo: daysBetween(p.created_at_shop, appToday()),
+        }));
+        const notes = notesOf(customer.id).slice(0, 5).map((n) => redactNote(n.text));
+        const parsedBrief = CustomerBriefSchema.safeParse({
+          language: customer.language,
+          country: customer.country || '',
+          orderCount: customer.order_count,
+          spendTier: customer.spend_tier,
+          daysSinceLastOrder: customer.last_order_at ? daysBetween(customer.last_order_at, appToday()) : null,
+          purchases,
+          preferenceTags: JSON.parse(customer.preference_tags || '[]'),
+          notes,
+        });
+        if (!parsedBrief.success) {
+          throw new BriefRejected(parsedBrief.error.issues[0]?.message || '客户简报无效');
+        }
+        const copy = generateTemplate(parsedBrief.data, outreach.intentZh, outreach.discountCode || undefined);
+        insert.run(
+          uuid(),
+          outreach.id,
+          recipient.id,
+          customer.id,
+          customer.language,
+          recipient.mode,
+          copy.subject,
+          copy.body,
+          copy.zhSubject,
+          copy.zhBody,
+          JSON.stringify(copy.points),
+          purchases[0]?.title || '',
+        );
+      }
+      db.prepare("UPDATE outreach SET status='reviewing' WHERE id=?").run(outreach.id);
+    });
+    try {
+      writeDrafts();
+    } catch (err) {
+      if (!(err instanceof BriefRejected)) throw err;
+      return reply.code(400).send(errorBody(ErrorCodes.VALIDATION_FAILED, err.message));
     }
-    db.prepare("UPDATE outreach SET status='reviewing' WHERE id=?").run(outreach.id);
     return getOutreach(outreach.id, auth.storeId);
   });
 

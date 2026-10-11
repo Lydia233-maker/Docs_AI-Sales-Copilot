@@ -1,17 +1,6 @@
-import { containsEmail, containsPhone, extractPlaceholders, isAllowedPlaceholder, redactContact } from '@copilot/shared';
+import { type CustomerBrief, containsEmail, containsPhone, draftIssues, redactContact } from '@copilot/shared';
 
-export type Brief = {
-  language: 'en' | 'es';
-  country: string;
-  orderCount: number;
-  spendTier: string;
-  daysSinceLastOrder: number | null;
-  purchases: { title: string; category: string; daysAgo: number }[];
-  preferenceTags: string[];
-  notes: string[];
-};
-
-export function generateTemplate(brief: Brief, intentZh: string, discountCode?: string) {
+export function generateTemplate(brief: CustomerBrief, intentZh: string, discountCode?: string) {
   const product = brief.purchases[0]?.title || 'your last order';
   const noteHint = brief.notes[0] || '';
   const tags = brief.preferenceTags.map((tag) => tag.trim()).filter(Boolean);
@@ -61,19 +50,7 @@ ${discountCode ? `Use code {{discount_code}} for 20% off.` : 'We have a restock 
 }
 
 export function checkDraft(body: string) {
-  const issues: { level: 'block' | 'warn'; message: string }[] = [];
-  if (!body.includes('{{unsubscribe_url}}')) {
-    issues.push({ level: 'block', message: '缺少退订链接 {{unsubscribe_url}}' });
-  }
-  if (!body.includes('{{company_address}}')) {
-    issues.push({ level: 'block', message: '缺少公司地址 {{company_address}}' });
-  }
-  for (const name of extractPlaceholders(body)) {
-    if (!isAllowedPlaceholder(name)) {
-      issues.push({ level: 'block', message: `未知的占位符 ${name}` });
-    }
-  }
-  return issues;
+  return draftIssues(body);
 }
 
 export function renderCopy(body: string, values: Record<string, string>) {

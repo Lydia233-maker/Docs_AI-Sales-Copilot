@@ -69,6 +69,22 @@ export function isAllowedPlaceholder(name: string): boolean {
   return (PLACEHOLDERS as readonly string[]).includes(name);
 }
 
+export function draftIssues(body: string): { level: 'block'; message: string }[] {
+  const issues: { level: 'block'; message: string }[] = [];
+  if (!body.includes('{{unsubscribe_url}}')) {
+    issues.push({ level: 'block', message: '缺少退订链接 {{unsubscribe_url}}' });
+  }
+  if (!body.includes('{{company_address}}')) {
+    issues.push({ level: 'block', message: '缺少公司地址 {{company_address}}' });
+  }
+  for (const name of extractPlaceholders(body)) {
+    if (!isAllowedPlaceholder(name)) {
+      issues.push({ level: 'block', message: `未知的占位符 ${name}` });
+    }
+  }
+  return issues;
+}
+
 export function extractPlaceholders(text: string): string[] {
   const found = new Set<string>();
   for (const match of text.matchAll(/\{\{\s*([a-z_]+)\s*\}\}/g)) {

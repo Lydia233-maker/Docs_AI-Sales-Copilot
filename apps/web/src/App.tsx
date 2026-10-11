@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { draftIssues } from '@copilot/shared';
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   api,
@@ -576,14 +577,7 @@ function categoryLabel(category: string | null) {
 }
 
 function localBlockers(body: string) {
-  const issues: string[] = [];
-  if (!body.includes('{{unsubscribe_url}}')) {
-    issues.push('文案里必须保留 {{unsubscribe_url}}，否则不能通过');
-  }
-  if (!body.includes('{{company_address}}')) {
-    issues.push('文案里必须保留 {{company_address}}，否则不能通过');
-  }
-  return issues;
+  return draftIssues(body).map((issue) => issue.message);
 }
 
 function statusLabel(status: string) {
