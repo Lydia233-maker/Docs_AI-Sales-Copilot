@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  AudienceScenarioSchema,
   CustomerBriefSchema,
+  FactDecisionBody,
+  UpdateCompanyAddressBody,
+  UpdateLanguageBody,
   extractPlaceholders,
   isAllowedPlaceholder,
 } from './index.ts';
@@ -40,4 +44,48 @@ test('customer brief rejects personal fields', () => {
     email: 'ann@example.com',
   });
   assert.equal(bad.success, false);
+
+  const withName = CustomerBriefSchema.safeParse({
+    language: 'en',
+    country: 'US',
+    orderCount: 1,
+    spendTier: 'low',
+    daysSinceLastOrder: null,
+    purchases: [],
+    preferenceTags: [],
+    notes: [],
+    firstName: 'Anna',
+  });
+  assert.equal(withName.success, false);
+
+  const withPhone = CustomerBriefSchema.safeParse({
+    language: 'es',
+    country: 'MX',
+    orderCount: 1,
+    spendTier: 'low',
+    daysSinceLastOrder: null,
+    purchases: [],
+    preferenceTags: [],
+    notes: [],
+    phone: '+15551212',
+  });
+  assert.equal(withPhone.success, false);
+});
+
+test('audience scenario allows only the four scenes', () => {
+  for (const scenario of ['winback_dormant', 'repurchase', 'first_to_second', 'abandoned_checkout']) {
+    assert.equal(AudienceScenarioSchema.safeParse(scenario).success, true);
+  }
+  assert.equal(AudienceScenarioSchema.safeParse('all').success, false);
+  assert.equal(AudienceScenarioSchema.safeParse('holiday').success, false);
+});
+
+test('fact, language, and address bodies', () => {
+  assert.equal(FactDecisionBody.safeParse({ decision: 'confirm' }).success, true);
+  assert.equal(FactDecisionBody.safeParse({ decision: 'dismiss' }).success, true);
+  assert.equal(FactDecisionBody.safeParse({ decision: 'reject' }).success, false);
+  assert.equal(UpdateLanguageBody.safeParse({ language: 'es' }).success, true);
+  assert.equal(UpdateLanguageBody.safeParse({ language: 'fr' }).success, false);
+  assert.equal(UpdateCompanyAddressBody.safeParse({ companyAddress: '456 Market St' }).success, true);
+  assert.equal(UpdateCompanyAddressBody.safeParse({ companyAddress: '   ' }).success, false);
 });

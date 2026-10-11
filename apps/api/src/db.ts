@@ -124,6 +124,43 @@ CREATE TABLE IF NOT EXISTS messages (
   status TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS abandoned_checkouts (
+  id TEXT PRIMARY KEY,
+  store_id TEXT NOT NULL,
+  customer_id TEXT,
+  email TEXT NOT NULL,
+  external_id TEXT NOT NULL,
+  created_at_shop TEXT NOT NULL,
+  UNIQUE(store_id, external_id)
+);
+CREATE TABLE IF NOT EXISTS abandoned_checkout_items (
+  id TEXT PRIMARY KEY,
+  checkout_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  quantity INTEGER NOT NULL DEFAULT 1
+);
+CREATE TABLE IF NOT EXISTS facts (
+  id TEXT PRIMARY KEY,
+  store_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  status TEXT NOT NULL,
+  source TEXT NOT NULL,
+  quote TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS generation_jobs (
+  id TEXT PRIMARY KEY,
+  store_id TEXT NOT NULL,
+  outreach_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  planned_count INTEGER NOT NULL DEFAULT 0,
+  completed_count INTEGER NOT NULL DEFAULT 0,
+  failed_count INTEGER NOT NULL DEFAULT 0,
+  next_customer_id TEXT,
+  writer TEXT,
+  updated_at TEXT NOT NULL
+);
 `);
 
 export function uuid() {

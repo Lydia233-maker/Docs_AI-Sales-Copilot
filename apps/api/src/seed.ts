@@ -28,6 +28,10 @@ function spendTier(cents: number) {
   return 'low';
 }
 
+db.exec('DELETE FROM generation_jobs');
+db.exec('DELETE FROM facts');
+db.exec('DELETE FROM abandoned_checkout_items');
+db.exec('DELETE FROM abandoned_checkouts');
 db.exec('DELETE FROM messages');
 db.exec('DELETE FROM drafts');
 db.exec('DELETE FROM outreach_recipients');

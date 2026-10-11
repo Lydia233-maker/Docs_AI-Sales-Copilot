@@ -6,6 +6,28 @@ export type Language = (typeof LANGUAGES)[number];
 export const SCENARIOS = ['winback_dormant', 'all'] as const;
 export type Scenario = (typeof SCENARIOS)[number];
 
+export const AUDIENCE_SCENARIOS = [
+  'winback_dormant',
+  'repurchase',
+  'first_to_second',
+  'abandoned_checkout',
+] as const;
+export type AudienceScenario = (typeof AUDIENCE_SCENARIOS)[number];
+
+export const AudienceScenarioSchema = z.enum(AUDIENCE_SCENARIOS);
+
+export const FactDecisionBody = z.object({
+  decision: z.enum(['confirm', 'dismiss']),
+});
+
+export const UpdateLanguageBody = z.object({
+  language: z.enum(LANGUAGES),
+});
+
+export const UpdateCompanyAddressBody = z.object({
+  companyAddress: z.string().trim().min(1, '请填写公司地址').max(300),
+});
+
 export const PLACEHOLDERS = [
   'first_name',
   'last_product',
