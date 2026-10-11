@@ -1,0 +1,15 @@
+{
+  "name": "ai-sales-copilot",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --parallel --filter api --filter web dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "seed": "pnpm --filter api seed"
+  },
+  "packageManager": "pnpm@10.33.3",
+  "pnpm": {
+    "onlyBuiltDependencies": ["better-sqlite3", "esbuild"]
+  }
+}
