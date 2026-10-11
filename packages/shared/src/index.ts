@@ -58,7 +58,7 @@ export const AddNoteBody = z.object({
 });
 
 export const AddPreferenceTagBody = z.object({
-  tag: z.string().trim().min(1, '标签不能为空').max(40),
+  tag: z.string().trim().min(1, '标签不能为空').max(40, '标签最多 40 个字'),
 });
 
 export const PreviewAudienceBody = z.object({

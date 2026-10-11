@@ -145,6 +145,7 @@ function CustomerPage() {
   const [data, setData] = useState<CustomerDetail | null>(null);
   const [text, setText] = useState('');
   const [tag, setTag] = useState('');
+  const [tagError, setTagError] = useState('');
   const [warn, setWarn] = useState<string[]>([]);
   const load = () => id && api.customer(id).then(setData);
   useEffect(() => {
@@ -208,19 +209,43 @@ function CustomerPage() {
         </table>
         <label>添加偏好标签</label>
         <div className="row">
-          <input value={tag} onChange={(e) => setTag(e.target.value)} placeholder="例如：布偶猫" />
+          <input
+            value={tag}
+            onChange={(e) => {
+              setTag(e.target.value);
+              setTagError('');
+            }}
+            placeholder="例如：布偶猫"
+          />
           <button
             className="btn"
             onClick={async () => {
-              if (!id || !tag.trim()) return;
-              await api.addTag(id, tag.trim());
-              setTag('');
-              load();
+              const value = tag.trim();
+              if (!id || !value) {
+                setTagError('标签不能为空');
+                return;
+              }
+              if (value.length > 40) {
+                setTagError('标签最多 40 个字');
+                return;
+              }
+              try {
+                await api.addTag(id, value);
+                setTag('');
+                setTagError('');
+                load();
+              } catch (err) {
+                const message = err instanceof Error ? err.message : '';
+                setTagError(
+                  message.includes('标签') ? message : '网络失败，标签没有保存。请确认后端已启动后再试。',
+                );
+              }
             }}
           >
             添加标签
           </button>
         </div>
+        {tagError && <p className="danger">{tagError}</p>}
       </div>
       <div className="card">
         <h3>订单</h3>
