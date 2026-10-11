@@ -156,11 +156,43 @@ function CustomerPage() {
         {data.firstName} {data.lastName}
       </h2>
       <div className="card">
-        <p>
-          {data.country} · {data.language === 'es' ? '西班牙语' : '英语'} · {data.orderCount} 笔订单 · 消费 $
-          {(data.totalSpentCents / 100).toFixed(2)}
-        </p>
-        <p className="muted">末购 {data.lastOrderAt}，距今 {data.daysSinceLastOrder} 天</p>
+        <h3>画像</h3>
+        <table>
+          <tbody>
+            <tr>
+              <th>语言</th>
+              <td>{data.language === 'es' ? '西班牙语' : '英语'}</td>
+            </tr>
+            <tr>
+              <th>国家</th>
+              <td>{data.country}</td>
+            </tr>
+            <tr>
+              <th>购买次数</th>
+              <td>{data.orderCount} 笔</td>
+            </tr>
+            <tr>
+              <th>消费金额</th>
+              <td>${(data.totalSpentCents / 100).toFixed(2)}</td>
+            </tr>
+            <tr>
+              <th>消费层级</th>
+              <td>{data.spendTier === 'high' ? '高' : data.spendTier === 'mid' ? '中' : '低'}</td>
+            </tr>
+            <tr>
+              <th>主要品类</th>
+              <td>{categoryLabel(data.topCategory)}</td>
+            </tr>
+            <tr>
+              <th>距上次购买</th>
+              <td>{data.daysSinceLastOrder == null ? '没有订单' : `${data.daysSinceLastOrder} 天`}</td>
+            </tr>
+            <tr>
+              <th>营销同意</th>
+              <td>{data.emailConsent ? '同意接收邮件' : '未同意，不会生成文案'}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
       <div className="card">
         <h3>订单</h3>
@@ -407,6 +439,14 @@ function OutreachPage() {
       </div>
     </div>
   );
+}
+
+function categoryLabel(category: string | null) {
+  if (category === 'cat_litter') return '猫砂';
+  if (category === 'cat_food') return '猫粮';
+  if (category === 'dog_food') return '狗粮';
+  if (category === 'treats') return '零食玩具';
+  return '还没有';
 }
 
 function checkLocal(body: string) {
