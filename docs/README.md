@@ -2,7 +2,7 @@
 
 面向中国跨境卖家（店主、销售、运营）的定向营销工具。卖家用中文写下这次推广要说什么，系统按每位海外顾客的购买记录和备注，生成一封英语或西班牙语邮件，并给出中文对照。审核后目前以模拟方式发送。
 
-当前代码是可离线演示的初稿，不是 `docs/01-产品定位与需求.md` 里的完整试用版。产品对外版本号：待确认。`packages/shared` 的包版本是 `0.1.0`。
+当前代码是可离线演示的 **V0.1**，产品名是 **AI定向营销助手**。它还不是 `docs/01-产品定位与需求.md` 里的完整试用版。
 
 仓库：<https://github.com/Lydia233-maker/Docs_AI-Sales-Copilot>
 
@@ -53,7 +53,8 @@ pnpm dev
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | 目录、请求路径、数据流 |
 | [ROADMAP.md](./ROADMAP.md) | 已完成、未开工、需求里已确认但未实现 |
 | [CHANGELOG.md](./CHANGELOG.md) | 按提交整理的变更 |
-| [TODO.md](./TODO.md) | 未做功能、已知问题、技术债 |
+| [TODO.md](./TODO.md) | 未做功能、已知问题、技术债。优先级还没排 |
+| [SHOPIFY_SAMPLE_TEST.md](./SHOPIFY_SAMPLE_TEST.md) | 用 Shopify 公开样例对过导入后的结果 |
 | [05-当前版本总结.md](./05-当前版本总结.md) | 同一初稿的中文说明，含踩坑 |
 
 需求与方案（描述目标，不等于当前代码）：

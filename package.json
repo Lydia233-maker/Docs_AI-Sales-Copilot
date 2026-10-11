@@ -1,5 +1,6 @@
 {
   "name": "ai-sales-copilot",
+  "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "pnpm --parallel --filter api --filter web dev",

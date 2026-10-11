@@ -54,6 +54,29 @@ export function getField(row: Record<string, string>, ...names: string[]) {
   return '';
 }
 
+/**
+ * 把订单 CSV 收成「一笔订单、多行商品」。
+ * Shopify 导出有两种写法：后续行重复订单号，或把订单号留空。
+ */
+export function groupOrderRows(rows: Record<string, string>[]) {
+  const groups: Record<string, string>[][] = [];
+  let current: Record<string, string>[] | null = null;
+  for (const row of rows) {
+    const name = getField(row, 'name');
+    if (!name) {
+      if (current && getField(row, 'lineitem name')) current.push(row);
+      continue;
+    }
+    if (!current || getField(current[0], 'name') !== name) {
+      current = [row];
+      groups.push(current);
+    } else {
+      current.push(row);
+    }
+  }
+  return groups;
+}
+
 export function moneyToCents(value: string) {
   if (!value) return 0;
   const n = Number(value.replace(/[^0-9.-]/g, ''));

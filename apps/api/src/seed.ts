@@ -7,6 +7,7 @@ import {
   categoryOf,
   daysBetween,
   getField,
+  groupOrderRows,
   inferLanguage,
   moneyToCents,
   parseCsv,
@@ -59,12 +60,13 @@ const customerByEmail = new Map<string, string>();
 for (const row of customerRows) {
   const id = uuid();
   const email = getField(row, 'email').toLowerCase();
+  if (!email) continue;
   const tags = getField(row, 'tags');
   const country = getField(row, 'default address country code', 'country');
   insertCustomer.run(
     id,
     storeId,
-    getField(row, 'customer id'),
+    getField(row, 'customer id') || email,
     email,
     getField(row, 'first name'),
     getField(row, 'last name'),
@@ -77,12 +79,7 @@ for (const row of customerRows) {
 }
 
 const orderRows = parseCsv(readFileSync(join(fixtureDir, 'orders.csv'), 'utf8'));
-const grouped = new Map<string, typeof orderRows>();
-for (const row of orderRows) {
-  const name = getField(row, 'name');
-  if (!grouped.has(name)) grouped.set(name, []);
-  grouped.get(name)!.push(row);
-}
+const grouped = groupOrderRows(orderRows);
 
 const insertOrder = db.prepare(
   `INSERT INTO orders (id, store_id, customer_id, external_id, name, email, created_at_shop, total_cents, financial_status)
@@ -92,8 +89,9 @@ const insertItem = db.prepare(
   `INSERT INTO order_items (id, order_id, title, category, quantity, price_cents) VALUES (?, ?, ?, ?, ?, ?)`,
 );
 
-for (const [name, lines] of grouped) {
+for (const lines of grouped) {
   const first = lines[0];
+  const name = getField(first, 'name');
   const email = getField(first, 'email').toLowerCase();
   const orderId = uuid();
   const total = moneyToCents(getField(first, 'total')) || lines.reduce((s, l) => s + moneyToCents(getField(l, 'lineitem price')), 0);
