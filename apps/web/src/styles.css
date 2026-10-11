@@ -69,3 +69,10 @@ label { display: block; margin: 10px 0 6px; font-size: 13px; }
 .split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .muted { color: #6b7280; font-size: 13px; }
 .banner { background: #fff3c4; padding: 8px 12px; border-radius: 8px; margin-bottom: 12px; }
+.copy-box {
+  white-space: pre-wrap;
+  background: #f7f4ee;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 13px;
+}

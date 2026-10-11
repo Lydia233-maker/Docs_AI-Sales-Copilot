@@ -1,6 +1,14 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { api, type Customer, type CustomerDetail, type Draft, type Outreach, type Preview } from './api';
+import {
+  api,
+  type Customer,
+  type CustomerDetail,
+  type Draft,
+  type Outreach,
+  type OutreachListItem,
+  type Preview,
+} from './api';
 
 function useAuth() {
   const [ready, setReady] = useState(false);
@@ -146,6 +154,7 @@ function CustomerPage() {
   const [text, setText] = useState('');
   const [tag, setTag] = useState('');
   const [tagError, setTagError] = useState('');
+  const [noteError, setNoteError] = useState('');
   const [warn, setWarn] = useState<string[]>([]);
   const load = () => id && api.customer(id).then(setData);
   useEffect(() => {
@@ -251,7 +260,7 @@ function CustomerPage() {
         <h3>订单</h3>
         {data.orders.map((o) => (
           <div key={o.id}>
-            {o.name} · {o.created_at_shop} · ${(o.total_cents / 100).toFixed(2)}
+            {o.name} · {o.createdAtShop} · ${(o.totalCents / 100).toFixed(2)}
           </div>
         ))}
       </div>
@@ -260,17 +269,35 @@ function CustomerPage() {
         {data.notes.map((n) => (
           <p key={n.id}>{n.text}</p>
         ))}
-        {warn.length > 0 && <p className="warn">备注中包含{warn.join('、')}，发给 AI 前会自动隐藏</p>}
-        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} />
+        {warn.length > 0 && (
+          <p className="warn">备注中包含{warn.map(privacyLabel).join('、')}，发给 AI 前会自动隐藏</p>
+        )}
+        <textarea
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            setNoteError('');
+          }}
+          rows={3}
+        />
+        {noteError && <p className="danger">{noteError}</p>}
         <p>
           <button
             className="btn"
             onClick={async () => {
-              if (!id || !text.trim()) return;
-              const res = await api.addNote(id, text);
-              setWarn(res.privacyWarnings);
-              setText('');
-              load();
+              if (!id || !text.trim()) {
+                setNoteError('备注不能为空');
+                return;
+              }
+              try {
+                const res = await api.addNote(id, text);
+                setWarn(res.privacyWarnings);
+                setText('');
+                setNoteError('');
+                load();
+              } catch (err) {
+                setNoteError(err instanceof Error ? err.message : '备注没有保存。请确认后端已启动后再试。');
+              }
             }}
           >
             添加备注
@@ -288,6 +315,7 @@ function AudiencePage() {
   const [intent, setIntent] = useState('黑五老客专享 8 折，主推猫砂和猫粮，强调囤货划算');
   const [code, setCode] = useState('SAVE20');
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
   const refresh = () => api.preview({ scenario }).then(setPreview);
   useEffect(() => {
     refresh();
@@ -315,17 +343,20 @@ function AudiencePage() {
         <p>
           <button
             className="btn"
-            disabled={busy}
+            disabled={busy || !intent.trim()}
             onClick={async () => {
               setBusy(true);
+              setError('');
               try {
                 const created = await api.createOutreach({
                   scenario,
-                  intentZh: intent,
-                  discountCode: code,
+                  intentZh: intent.trim(),
+                  discountCode: code.trim(),
                 });
                 const generated = await api.generate(created.id);
                 nav(`/outreach/${generated.id}`);
+              } catch (err) {
+                setError(err instanceof Error ? err.message : '生成失败。请确认后端已启动后再试。');
               } finally {
                 setBusy(false);
               }
@@ -334,28 +365,36 @@ function AudiencePage() {
             {busy ? '正在为客户生成文案…' : '开始生成'}
           </button>
         </p>
+        {error && <p className="danger">{error}</p>}
       </div>
     </div>
   );
 }
 
 function OutreachListPage() {
-  const [items, setItems] = useState<{ id: string; name: string; intent_zh: string; status: string }[]>([]);
+  const [items, setItems] = useState<OutreachListItem[]>([]);
+  const [error, setError] = useState('');
   useEffect(() => {
-    fetch('/api/v1/outreach', { credentials: 'include' })
-      .then((r) => r.json())
-      .then((data) => setItems(data.items || []));
+    api
+      .listOutreach()
+      .then((data) => setItems(data.items))
+      .catch((err) => setError(err instanceof Error ? err.message : '推广列表加载失败'));
   }, []);
   return (
     <div>
       <h2>推广</h2>
       <div className="card">
+        {error && <p className="danger">{error}</p>}
         {items.map((item) => (
           <p key={item.id}>
-            <Link to={`/outreach/${item.id}`}>{item.name}</Link> · {item.status}
+            <Link to={`/outreach/${item.id}`}>{item.name}</Link>
+            <span className="muted">
+              {' '}
+              · {statusLabel(item.status)} · {item.intentZh}
+            </span>
           </p>
         ))}
-        {items.length === 0 && <p className="muted">还没有推广，先去挑选客户。</p>}
+        {items.length === 0 && !error && <p className="muted">还没有推广，先去挑选客户。</p>}
       </div>
     </div>
   );
@@ -367,6 +406,7 @@ function OutreachPage() {
   const [current, setCurrent] = useState<Draft | null>(null);
   const [body, setBody] = useState('');
   const [copied, setCopied] = useState('');
+  const [rendered, setRendered] = useState<{ subject: string; body: string } | null>(null);
   const [message, setMessage] = useState('');
   const load = () =>
     id &&
@@ -382,7 +422,9 @@ function OutreachPage() {
   if (!data) return <p>加载中…</p>;
   return (
     <div>
-      <h2>{data.name}</h2>
+      <h2>
+        {data.name} · {statusLabel(data.status)}
+      </h2>
       <p className="muted">{data.intentZh}</p>
       <div className="banner">模拟发送 · 可触达 {data.reachable} · 排除 {data.excluded}</div>
       <div className="row">
@@ -421,9 +463,11 @@ function OutreachPage() {
                 onClick={() => {
                   setCurrent(d);
                   setBody(d.body);
+                  setRendered(null);
+                  setCopied('');
                 }}
               >
-                {d.firstName} {d.lastName} · {d.language === 'es' ? '西语' : '英语'} · {d.status}
+                {d.firstName} {d.lastName} · {d.language === 'es' ? '西语' : '英语'} · {statusLabel(d.status)}
               </button>
               <br />
               <span className="muted">{d.personalizationPoints[0]}</span>
@@ -449,44 +493,73 @@ function OutreachPage() {
               <b>{current.subject}</b>
             </p>
             <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={12} />
+            {localBlockers(body).map((issue) => (
+              <p key={issue} className="danger">
+                {issue}
+              </p>
+            ))}
             <p className="muted">中文对照：{current.zhBody}</p>
             <div className="row">
               <button
                 className="btn secondary"
                 onClick={async () => {
-                  await api.updateDraft(current.id, body);
-                  load();
+                  try {
+                    await api.updateDraft(current.id, body);
+                    setMessage('已保存修改');
+                    load();
+                  } catch (err) {
+                    setMessage(err instanceof Error ? err.message : '保存失败');
+                  }
                 }}
               >
                 保存修改
               </button>
               <button
                 className="btn"
-                disabled={!current.canApprove && checkLocal(body)}
+                disabled={localBlockers(body).length > 0 || current.status === 'approved'}
                 onClick={async () => {
                   try {
                     await api.updateDraft(current.id, body);
                     await api.reviewDraft(current.id, 'approve');
+                    setMessage('这份文案已通过');
                     load();
                   } catch (err) {
                     setMessage(err instanceof Error ? err.message : '无法通过');
                   }
                 }}
               >
-                通过
+                {current.status === 'approved' ? '已通过' : '通过'}
               </button>
               <button
                 className="btn secondary"
                 onClick={async () => {
-                  const rendered = await api.renderDraft(current.id);
-                  await navigator.clipboard.writeText(`${rendered.subject}\n\n${rendered.body}`);
-                  setCopied('已复制填好姓名的最终文案');
+                  try {
+                    const next = await api.renderDraft(current.id);
+                    setRendered(next);
+                    const text = `${next.subject}\n\n${next.body}`;
+                    try {
+                      await navigator.clipboard.writeText(text);
+                      setCopied('已复制填好姓名的最终文案。下面也能直接选中。');
+                    } catch {
+                      setCopied('浏览器没有允许自动复制。请在下面选中文案后手动复制。');
+                    }
+                  } catch (err) {
+                    setCopied('');
+                    setMessage(err instanceof Error ? err.message : '无法生成最终文案');
+                  }
                 }}
               >
                 复制
               </button>
             </div>
             {copied && <p className="muted">{copied}</p>}
+            {rendered && (
+              <pre className="copy-box">
+                {rendered.subject}
+                {'\n\n'}
+                {rendered.body}
+              </pre>
+            )}
           </div>
         )}
       </div>
@@ -502,8 +575,31 @@ function categoryLabel(category: string | null) {
   return '还没有';
 }
 
-function checkLocal(body: string) {
-  return !body.includes('{{unsubscribe_url}}');
+function localBlockers(body: string) {
+  const issues: string[] = [];
+  if (!body.includes('{{unsubscribe_url}}')) {
+    issues.push('文案里必须保留 {{unsubscribe_url}}，否则不能通过');
+  }
+  if (!body.includes('{{company_address}}')) {
+    issues.push('文案里必须保留 {{company_address}}，否则不能通过');
+  }
+  return issues;
+}
+
+function statusLabel(status: string) {
+  if (status === 'draft') return '草稿';
+  if (status === 'reviewing') return '待审核';
+  if (status === 'ready') return '待审核';
+  if (status === 'approved') return '已通过';
+  if (status === 'rejected') return '已拒绝';
+  if (status === 'sent') return '已发送';
+  return status;
+}
+
+function privacyLabel(code: string) {
+  if (code === 'email') return '邮箱';
+  if (code === 'phone') return '电话';
+  return code;
 }
 
 function Guard({ children }: { children: ReactNode }) {

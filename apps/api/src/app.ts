@@ -213,12 +213,21 @@ export async function buildApp() {
     if (!row) return reply.code(404).send(errorBody(ErrorCodes.NOT_FOUND, '客户不存在'));
     const orders = db
       .prepare('SELECT id, name, created_at_shop, total_cents FROM orders WHERE customer_id=? ORDER BY created_at_shop DESC')
-      .all(id);
+      .all(id) as { id: string; name: string; created_at_shop: string; total_cents: number }[];
     return {
       ...serializeCustomer(row),
-      notes: notesOf(id),
-      orders,
-      purchases: customerPurchases(id),
+      notes: notesOf(id).map((note) => ({ id: note.id, text: note.text, createdAt: note.created_at })),
+      orders: orders.map((order) => ({
+        id: order.id,
+        name: order.name,
+        createdAtShop: order.created_at_shop,
+        totalCents: order.total_cents,
+      })),
+      purchases: customerPurchases(id).map((purchase) => ({
+        title: purchase.title,
+        category: purchase.category,
+        createdAtShop: purchase.created_at_shop,
+      })),
     };
   });
 
@@ -408,9 +417,22 @@ export async function buildApp() {
 
   app.get('/api/v1/outreach', async (req) => {
     const auth = (req as typeof req & { auth: Authed }).auth;
-    const items = db
+    const rows = db
       .prepare('SELECT id, name, intent_zh, status, created_at FROM outreach WHERE store_id=? ORDER BY created_at DESC')
-      .all(auth.storeId);
+      .all(auth.storeId) as {
+      id: string;
+      name: string;
+      intent_zh: string;
+      status: string;
+      created_at: string;
+    }[];
+    const items = rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      intentZh: row.intent_zh,
+      status: row.status,
+      createdAt: row.created_at,
+    }));
     return { items, total: items.length };
   });
 
@@ -614,9 +636,22 @@ export async function buildApp() {
     const auth = (req as typeof req & { auth: Authed }).auth;
     const outreach = getOutreach((req.params as { id: string }).id, auth.storeId);
     if (!outreach) return reply.code(404).send(errorBody(ErrorCodes.NOT_FOUND, '推广不存在'));
-    const items = db
+    const rows = db
       .prepare('SELECT id, customer_id, rendered_subject, status, created_at FROM messages WHERE outreach_id=?')
-      .all(outreach.id);
+      .all(outreach.id) as {
+      id: string;
+      customer_id: string;
+      rendered_subject: string;
+      status: string;
+      created_at: string;
+    }[];
+    const items = rows.map((row) => ({
+      id: row.id,
+      customerId: row.customer_id,
+      renderedSubject: row.rendered_subject,
+      status: row.status,
+      createdAt: row.created_at,
+    }));
     return { items, total: items.length, sender: 'mock' };
   });
 

@@ -3,12 +3,16 @@ const json = (res: Response) => res.json();
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
     ...init,
+    headers: {
+      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.headers || {}),
+    },
   });
-  const data = await json(res);
+  const data = await json(res).catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data?.error?.message || '请求失败');
+    const message = data?.error?.message || data?.message;
+    throw new Error(typeof message === 'string' ? message : '请求失败');
   }
   return data as T;
 }
@@ -33,6 +37,7 @@ export const api = {
   preview: (body: object) => request<Preview>('/api/v1/audience/preview', { method: 'POST', body: JSON.stringify(body) }),
   createOutreach: (body: object) =>
     request<Outreach>('/api/v1/outreach', { method: 'POST', body: JSON.stringify(body) }),
+  listOutreach: () => request<{ items: OutreachListItem[]; total: number }>('/api/v1/outreach'),
   getOutreach: (id: string) => request<Outreach>(`/api/v1/outreach/${id}`),
   generate: (id: string) => request<Outreach>(`/api/v1/outreach/${id}/generate`, { method: 'POST' }),
   updateDraft: (id: string, body: string) =>
@@ -67,7 +72,15 @@ export type Customer = {
 
 export type CustomerDetail = Customer & {
   notes: { id: string; text: string }[];
-  orders: { id: string; name: string; created_at_shop: string; total_cents: number }[];
+  orders: { id: string; name: string; createdAtShop: string; totalCents: number }[];
+};
+
+export type OutreachListItem = {
+  id: string;
+  name: string;
+  intentZh: string;
+  status: string;
+  createdAt: string;
 };
 
 export type Preview = {
