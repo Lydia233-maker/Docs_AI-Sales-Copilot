@@ -25,6 +25,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ text }),
     }),
+  addTag: (id: string, tag: string) =>
+    request<{ preferenceTags: string[] }>(`/api/v1/customers/${id}/tags`, {
+      method: 'POST',
+      body: JSON.stringify({ tag }),
+    }),
   preview: (body: object) => request<Preview>('/api/v1/audience/preview', { method: 'POST', body: JSON.stringify(body) }),
   createOutreach: (body: object) =>
     request<Outreach>('/api/v1/outreach', { method: 'POST', body: JSON.stringify(body) }),
@@ -55,6 +60,7 @@ export type Customer = {
   lastOrderAt: string | null;
   spendTier: string;
   topCategory: string | null;
+  preferenceTags: string[];
   hasNotes: boolean;
   daysSinceLastOrder: number | null;
 };

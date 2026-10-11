@@ -144,6 +144,7 @@ function CustomerPage() {
   const { id } = useParams();
   const [data, setData] = useState<CustomerDetail | null>(null);
   const [text, setText] = useState('');
+  const [tag, setTag] = useState('');
   const [warn, setWarn] = useState<string[]>([]);
   const load = () => id && api.customer(id).then(setData);
   useEffect(() => {
@@ -191,8 +192,35 @@ function CustomerPage() {
               <th>营销同意</th>
               <td>{data.emailConsent ? '同意接收邮件' : '未同意，不会生成文案'}</td>
             </tr>
+            <tr>
+              <th>偏好标签</th>
+              <td>
+                {(data.preferenceTags || []).length === 0
+                  ? '还没有'
+                  : data.preferenceTags.map((item) => (
+                      <span key={item} className="tag">
+                        {item}
+                      </span>
+                    ))}
+              </td>
+            </tr>
           </tbody>
         </table>
+        <label>添加偏好标签</label>
+        <div className="row">
+          <input value={tag} onChange={(e) => setTag(e.target.value)} placeholder="例如：布偶猫" />
+          <button
+            className="btn"
+            onClick={async () => {
+              if (!id || !tag.trim()) return;
+              await api.addTag(id, tag.trim());
+              setTag('');
+              load();
+            }}
+          >
+            添加标签
+          </button>
+        </div>
       </div>
       <div className="card">
         <h3>订单</h3>

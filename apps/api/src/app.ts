@@ -4,6 +4,7 @@ import cors from '@fastify/cors';
 import Fastify from 'fastify';
 import {
   AddNoteBody,
+  AddPreferenceTagBody,
   CreateOutreachBody,
   ErrorCodes,
   LoginBody,
@@ -235,6 +236,23 @@ export async function buildApp() {
       'INSERT INTO customer_notes (id, store_id, customer_id, text, created_at) VALUES (?, ?, ?, ?, ?)',
     ).run(noteId, auth.storeId, id, parsed.data.text, nowIso());
     return { id: noteId, text: parsed.data.text, privacyWarnings: detectPrivacy(parsed.data.text) };
+  });
+
+  app.post('/api/v1/customers/:id/tags', async (req, reply) => {
+    const auth = (req as typeof req & { auth: Authed }).auth;
+    const id = (req.params as { id: string }).id;
+    const parsed = AddPreferenceTagBody.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(errorBody(ErrorCodes.VALIDATION_FAILED, parsed.error.issues[0]?.message || '标签无效'));
+    }
+    const customer = db
+      .prepare('SELECT id, preference_tags FROM customers WHERE id=? AND store_id=?')
+      .get(id, auth.storeId) as { id: string; preference_tags: string } | undefined;
+    if (!customer) return reply.code(404).send(errorBody(ErrorCodes.NOT_FOUND, '客户不存在'));
+    const tags = JSON.parse(customer.preference_tags || '[]') as string[];
+    if (!tags.includes(parsed.data.tag)) tags.push(parsed.data.tag);
+    db.prepare('UPDATE customers SET preference_tags=? WHERE id=?').run(JSON.stringify(tags), id);
+    return { preferenceTags: tags };
   });
 
   app.post('/api/v1/audience/preview', async (req, reply) => {

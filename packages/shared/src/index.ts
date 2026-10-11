@@ -57,6 +57,10 @@ export const AddNoteBody = z.object({
   text: z.string().trim().min(1, '备注不能为空').max(2000),
 });
 
+export const AddPreferenceTagBody = z.object({
+  tag: z.string().trim().min(1, '标签不能为空').max(40),
+});
+
 export const PreviewAudienceBody = z.object({
   scenario: z.enum(SCENARIOS),
   language: z.enum(LANGUAGES).optional(),
