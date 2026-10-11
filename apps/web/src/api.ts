@@ -34,6 +34,17 @@ export const api = {
       body: JSON.stringify({ customersCsv, ordersCsv }),
     }),
   customer: (id: string) => request<CustomerDetail>(`/api/v1/customers/${id}`),
+  updateLanguage: (id: string, language: 'en' | 'es') =>
+    request<Customer>(`/api/v1/customers/${id}/language`, {
+      method: 'PATCH',
+      body: JSON.stringify({ language }),
+    }),
+  store: () => request<{ id: string; name: string; companyAddress: string }>('/api/v1/store'),
+  updateAddress: (companyAddress: string) =>
+    request<{ companyAddress: string }>('/api/v1/store', {
+      method: 'PATCH',
+      body: JSON.stringify({ companyAddress }),
+    }),
   addNote: (id: string, text: string) =>
     request<{ privacyWarnings: string[] }>(`/api/v1/customers/${id}/notes`, {
       method: 'POST',

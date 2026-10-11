@@ -12,7 +12,9 @@ import {
   ImportCustomerOrdersBody,
   PreviewAudienceBody,
   ReviewDraftBody,
+  UpdateCompanyAddressBody,
   UpdateDraftBody,
+  UpdateLanguageBody,
   errorBody,
 } from '@copilot/shared';
 import { appToday, db, nowIso, uuid } from './db.ts';
@@ -188,7 +190,22 @@ export async function buildApp() {
 
   app.get('/api/v1/store', async (req) => {
     const auth = (req as typeof req & { auth: Authed }).auth;
-    return db.prepare('SELECT id, name, company_address, brand_voice FROM stores WHERE id=?').get(auth.storeId);
+    const store = db.prepare('SELECT id, name, company_address FROM stores WHERE id=?').get(auth.storeId) as {
+      id: string;
+      name: string;
+      company_address: string;
+    };
+    return { id: store.id, name: store.name, companyAddress: store.company_address };
+  });
+
+  app.patch('/api/v1/store', async (req, reply) => {
+    const auth = (req as typeof req & { auth: Authed }).auth;
+    const parsed = UpdateCompanyAddressBody.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(errorBody(ErrorCodes.VALIDATION_FAILED, parsed.error.issues[0]?.message || '请填写公司地址'));
+    }
+    db.prepare('UPDATE stores SET company_address=? WHERE id=?').run(parsed.data.companyAddress, auth.storeId);
+    return { companyAddress: parsed.data.companyAddress };
   });
 
   app.get('/api/v1/customers', async (req) => {
@@ -252,6 +269,20 @@ export async function buildApp() {
       return reply.code(400).send(errorBody(ErrorCodes.VALIDATION_FAILED, parsed.error.issues[0]?.message || '请上传客户和订单 CSV'));
     }
     return applyCustomerOrders(auth.storeId, parsed.data.customersCsv, parsed.data.ordersCsv);
+  });
+
+  app.patch('/api/v1/customers/:id/language', async (req, reply) => {
+    const auth = (req as typeof req & { auth: Authed }).auth;
+    const id = (req.params as { id: string }).id;
+    const parsed = UpdateLanguageBody.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(errorBody(ErrorCodes.VALIDATION_FAILED, '请选择英语或西班牙语'));
+    }
+    const row = db.prepare('SELECT * FROM customers WHERE id=? AND store_id=?').get(id, auth.storeId) as CustomerRow | undefined;
+    if (!row) return reply.code(404).send(errorBody(ErrorCodes.NOT_FOUND, '客户不存在'));
+    db.prepare('UPDATE customers SET language=?, language_overridden=1 WHERE id=?').run(parsed.data.language, id);
+    const next = db.prepare('SELECT * FROM customers WHERE id=?').get(id) as CustomerRow;
+    return serializeCustomer(next);
   });
 
   app.post('/api/v1/customers/:id/notes', async (req, reply) => {

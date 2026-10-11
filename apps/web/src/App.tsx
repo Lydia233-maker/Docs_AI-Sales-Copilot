@@ -42,6 +42,9 @@ function Shell({ children, store }: { children: ReactNode; store: string }) {
         <Link className={loc.pathname.startsWith('/import') ? 'active' : ''} to="/import">
           导入
         </Link>
+        <Link className={loc.pathname.startsWith('/store') ? 'active' : ''} to="/store">
+          店铺
+        </Link>
         <Link className={loc.pathname.startsWith('/audience') ? 'active' : ''} to="/audience">
           挑选客户
         </Link>
@@ -161,6 +164,7 @@ function CustomerPage() {
   const [tagError, setTagError] = useState('');
   const [noteError, setNoteError] = useState('');
   const [warn, setWarn] = useState<string[]>([]);
+  const [languageError, setLanguageError] = useState('');
   const load = () => id && api.customer(id).then(setData);
   useEffect(() => {
     load();
@@ -177,7 +181,27 @@ function CustomerPage() {
           <tbody>
             <tr>
               <th>语言</th>
-              <td>{data.language === 'es' ? '西班牙语' : '英语'}</td>
+              <td>
+                <select
+                  value={data.language === 'es' ? 'es' : 'en'}
+                  style={{ width: 160 }}
+                  onChange={async (event) => {
+                    if (!id) return;
+                    const language = event.target.value === 'es' ? 'es' : 'en';
+                    setLanguageError('');
+                    try {
+                      await api.updateLanguage(id, language);
+                      load();
+                    } catch (err) {
+                      setLanguageError(err instanceof Error ? err.message : '语言没有保存');
+                    }
+                  }}
+                >
+                  <option value="en">英语</option>
+                  <option value="es">西班牙语</option>
+                </select>
+                {languageError && <p className="danger">{languageError}</p>}
+              </td>
             </tr>
             <tr>
               <th>国家</th>
@@ -308,6 +332,52 @@ function CustomerPage() {
             添加备注
           </button>
         </p>
+      </div>
+    </div>
+  );
+}
+
+function StorePage() {
+  const [address, setAddress] = useState('');
+  const [saved, setSaved] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    api.store().then((store) => {
+      setAddress(store.companyAddress);
+      setSaved(store.companyAddress);
+    });
+  }, []);
+  return (
+    <div>
+      <h2>店铺</h2>
+      <div className="card">
+        <label>公司地址</label>
+        <input value={address} onChange={(event) => setAddress(event.target.value)} />
+        <p className="muted">复制和模拟发送时，信的底部使用这个地址。</p>
+        <p>
+          <button
+            className="btn"
+            disabled={busy || !address.trim()}
+            onClick={async () => {
+              setBusy(true);
+              setError('');
+              try {
+                const next = await api.updateAddress(address.trim());
+                setAddress(next.companyAddress);
+                setSaved(next.companyAddress);
+              } catch (err) {
+                setError(err instanceof Error ? err.message : '地址没有保存');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            保存地址
+          </button>
+        </p>
+        {saved && <p className="muted">当前地址：{saved}</p>}
+        {error && <p className="danger">{error}</p>}
       </div>
     </div>
   );
@@ -742,6 +812,14 @@ export function App() {
         element={
           <Guard>
             <ImportPage />
+          </Guard>
+        }
+      />
+      <Route
+        path="/store"
+        element={
+          <Guard>
+            <StorePage />
           </Guard>
         }
       />
