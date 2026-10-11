@@ -4,10 +4,12 @@ import {
   AudienceScenarioSchema,
   CustomerBriefSchema,
   FactDecisionBody,
+  PreviewAudienceBody,
   UpdateCompanyAddressBody,
   UpdateLanguageBody,
   extractPlaceholders,
   isAllowedPlaceholder,
+  redactContact,
 } from './index.ts';
 
 test('placeholder whitelist', () => {
@@ -70,6 +72,30 @@ test('customer brief rejects personal fields', () => {
     phone: '+15551212',
   });
   assert.equal(withPhone.success, false);
+
+  const noteWithEmail = CustomerBriefSchema.safeParse({
+    language: 'en',
+    country: 'US',
+    orderCount: 1,
+    spendTier: 'low',
+    daysSinceLastOrder: null,
+    purchases: [],
+    preferenceTags: [],
+    notes: ['联系 ann@example.com'],
+  });
+  assert.equal(noteWithEmail.success, false);
+
+  const redacted = CustomerBriefSchema.safeParse({
+    language: 'en',
+    country: 'US',
+    orderCount: 1,
+    spendTier: 'low',
+    daysSinceLastOrder: null,
+    purchases: [],
+    preferenceTags: [],
+    notes: [redactContact('联系 ann@example.com 或 +1 555 010 2000')],
+  });
+  assert.equal(redacted.success, true);
 });
 
 test('audience scenario allows only the four scenes', () => {
@@ -80,6 +106,12 @@ test('audience scenario allows only the four scenes', () => {
   assert.equal(AudienceScenarioSchema.safeParse('holiday').success, false);
 });
 
+test('current preview page keeps the legacy scenario pair', () => {
+  assert.equal(PreviewAudienceBody.safeParse({ scenario: 'all' }).success, true);
+  assert.equal(PreviewAudienceBody.safeParse({ scenario: 'winback_dormant' }).success, true);
+  assert.equal(PreviewAudienceBody.safeParse({ scenario: 'repurchase' }).success, false);
+});
+
 test('fact, language, and address bodies', () => {
   assert.equal(FactDecisionBody.safeParse({ decision: 'confirm' }).success, true);
   assert.equal(FactDecisionBody.safeParse({ decision: 'dismiss' }).success, true);
@@ -88,4 +120,11 @@ test('fact, language, and address bodies', () => {
   assert.equal(UpdateLanguageBody.safeParse({ language: 'fr' }).success, false);
   assert.equal(UpdateCompanyAddressBody.safeParse({ companyAddress: '456 Market St' }).success, true);
   assert.equal(UpdateCompanyAddressBody.safeParse({ companyAddress: '   ' }).success, false);
+  assert.equal(UpdateCompanyAddressBody.safeParse({ companyAddress: 'a'.repeat(301) }).success, false);
+  assert.equal(FactDecisionBody.safeParse({ decision: 'confirm', email: 'ann@example.com' }).success, false);
+  assert.equal(UpdateLanguageBody.safeParse({ language: 'en', scenario: 'all' }).success, false);
+  assert.equal(
+    UpdateCompanyAddressBody.safeParse({ companyAddress: '456 Market St', email: 'ann@example.com' }).success,
+    false,
+  );
 });

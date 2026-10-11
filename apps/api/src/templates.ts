@@ -1,4 +1,4 @@
-import { extractPlaceholders, isAllowedPlaceholder } from '@copilot/shared';
+import { containsEmail, containsPhone, extractPlaceholders, isAllowedPlaceholder, redactContact } from '@copilot/shared';
 
 export type Brief = {
   language: 'en' | 'es';
@@ -82,13 +82,11 @@ export function renderCopy(body: string, values: Record<string, string>) {
 
 export function detectPrivacy(text: string) {
   const warnings: string[] = [];
-  if (/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(text)) warnings.push('email');
-  if (/\+?\d[\d\s()-]{7,}\d/.test(text)) warnings.push('phone');
+  if (containsEmail(text)) warnings.push('email');
+  if (containsPhone(text)) warnings.push('phone');
   return warnings;
 }
 
 export function redactNote(text: string) {
-  return text
-    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[已隐藏]')
-    .replace(/\+?\d[\d\s()-]{7,}\d/g, '[已隐藏]');
+  return redactContact(text);
 }

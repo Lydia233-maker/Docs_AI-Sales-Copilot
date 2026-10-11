@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const LANGUAGES = ['en', 'es'] as const;
 export type Language = (typeof LANGUAGES)[number];
 
+// 当前挑选页仍用这一组，含「全部」。四个新场景见 AUDIENCE_SCENARIOS，接上页面前不要互换。
 export const SCENARIOS = ['winback_dormant', 'all'] as const;
 export type Scenario = (typeof SCENARIOS)[number];
 
@@ -16,17 +17,44 @@ export type AudienceScenario = (typeof AUDIENCE_SCENARIOS)[number];
 
 export const AudienceScenarioSchema = z.enum(AUDIENCE_SCENARIOS);
 
-export const FactDecisionBody = z.object({
-  decision: z.enum(['confirm', 'dismiss']),
-});
+export const FactDecisionBody = z
+  .object({
+    decision: z.enum(['confirm', 'dismiss']),
+  })
+  .strict();
 
-export const UpdateLanguageBody = z.object({
-  language: z.enum(LANGUAGES),
-});
+export const UpdateLanguageBody = z
+  .object({
+    language: z.enum(LANGUAGES),
+  })
+  .strict();
 
-export const UpdateCompanyAddressBody = z.object({
-  companyAddress: z.string().trim().min(1, '请填写公司地址').max(300),
-});
+export const UpdateCompanyAddressBody = z
+  .object({
+    companyAddress: z.string().trim().min(1, '请填写公司地址').max(300),
+  })
+  .strict();
+
+const EMAIL_SOURCE = '[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}';
+const PHONE_SOURCE = '\\+?\\d[\\d\\s()-]{7,}\\d';
+
+export function containsEmail(text: string) {
+  return new RegExp(EMAIL_SOURCE, 'i').test(text);
+}
+
+export function containsPhone(text: string) {
+  return new RegExp(PHONE_SOURCE).test(text);
+}
+
+export function containsContactDetail(text: string) {
+  return containsEmail(text) || containsPhone(text);
+}
+
+export function redactContact(text: string) {
+  return text
+    .replace(new RegExp(EMAIL_SOURCE, 'gi'), '[已隐藏]')
+    .replace(new RegExp(PHONE_SOURCE, 'g'), '[已隐藏]');
+}
 
 export const PLACEHOLDERS = [
   'first_name',
@@ -64,7 +92,9 @@ export const CustomerBriefSchema = z
       }),
     ),
     preferenceTags: z.array(z.string()),
-    notes: z.array(z.string()),
+    notes: z.array(
+      z.string().refine((note) => !containsContactDetail(note), '备注里的邮箱或电话要先遮盖'),
+    ),
   })
   .strict();
 

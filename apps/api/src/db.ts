@@ -124,43 +124,80 @@ CREATE TABLE IF NOT EXISTS messages (
   status TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+`);
+
+const PROFILE_TABLES = ['abandoned_checkout_items', 'abandoned_checkouts', 'facts', 'generation_jobs'];
+
+function ensureProfileTables() {
+  const outdated = PROFILE_TABLES.some((name) => {
+    const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(name) as
+      | { sql: string }
+      | undefined;
+    return Boolean(row && !row.sql.includes('CHECK'));
+  });
+  if (outdated) {
+    db.pragma('foreign_keys = OFF');
+    for (const name of PROFILE_TABLES) db.exec(`DROP TABLE IF EXISTS ${name}`);
+    db.pragma('foreign_keys = ON');
+  }
+  db.exec(`
 CREATE TABLE IF NOT EXISTS abandoned_checkouts (
   id TEXT PRIMARY KEY,
-  store_id TEXT NOT NULL,
-  customer_id TEXT,
-  email TEXT NOT NULL,
+  store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+  customer_id TEXT REFERENCES customers(id) ON DELETE CASCADE,
+  email TEXT NOT NULL CHECK (length(trim(email)) > 0),
   external_id TEXT NOT NULL,
   created_at_shop TEXT NOT NULL,
   UNIQUE(store_id, external_id)
 );
 CREATE TABLE IF NOT EXISTS abandoned_checkout_items (
   id TEXT PRIMARY KEY,
-  checkout_id TEXT NOT NULL,
-  title TEXT NOT NULL,
-  quantity INTEGER NOT NULL DEFAULT 1
+  checkout_id TEXT NOT NULL REFERENCES abandoned_checkouts(id) ON DELETE CASCADE,
+  title TEXT NOT NULL CHECK (length(trim(title)) > 0),
+  quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity >= 1)
 );
 CREATE TABLE IF NOT EXISTS facts (
   id TEXT PRIMARY KEY,
-  store_id TEXT NOT NULL,
-  customer_id TEXT NOT NULL,
-  kind TEXT NOT NULL,
-  status TEXT NOT NULL,
-  source TEXT NOT NULL,
-  quote TEXT NOT NULL,
+  store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+  customer_id TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('preference', 'caution')),
+  status TEXT NOT NULL CHECK (status IN ('suggested', 'confirmed')),
+  source TEXT NOT NULL CHECK (source IN ('note', 'title', 'gorgias')),
+  quote TEXT NOT NULL CHECK (length(trim(quote)) > 0),
   created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS generation_jobs (
   id TEXT PRIMARY KEY,
-  store_id TEXT NOT NULL,
-  outreach_id TEXT NOT NULL,
-  status TEXT NOT NULL,
-  planned_count INTEGER NOT NULL DEFAULT 0,
-  completed_count INTEGER NOT NULL DEFAULT 0,
-  failed_count INTEGER NOT NULL DEFAULT 0,
-  next_customer_id TEXT,
-  writer TEXT,
+  store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+  outreach_id TEXT NOT NULL REFERENCES outreach(id) ON DELETE CASCADE,
+  status TEXT NOT NULL CHECK (status IN ('writing', 'done', 'interrupted')),
+  planned_count INTEGER NOT NULL DEFAULT 0 CHECK (planned_count >= 0),
+  completed_count INTEGER NOT NULL DEFAULT 0 CHECK (completed_count >= 0),
+  failed_count INTEGER NOT NULL DEFAULT 0 CHECK (failed_count >= 0),
+  next_customer_id TEXT REFERENCES customers(id) ON DELETE SET NULL,
+  writer TEXT CHECK (writer IS NULL OR writer IN ('model', 'template')),
   updated_at TEXT NOT NULL
 );
+`);
+}
+
+ensureProfileTables();
+
+db.exec(`
+CREATE TRIGGER IF NOT EXISTS stores_company_address_insert
+BEFORE INSERT ON stores
+FOR EACH ROW
+WHEN length(trim(NEW.company_address)) = 0 OR length(trim(NEW.company_address)) > 300
+BEGIN
+  SELECT RAISE(ABORT, 'company_address length');
+END;
+CREATE TRIGGER IF NOT EXISTS stores_company_address_update
+BEFORE UPDATE OF company_address ON stores
+FOR EACH ROW
+WHEN length(trim(NEW.company_address)) = 0 OR length(trim(NEW.company_address)) > 300
+BEGIN
+  SELECT RAISE(ABORT, 'company_address length');
+END;
 `);
 
 export function uuid() {
