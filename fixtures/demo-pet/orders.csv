@@ -1,0 +1,100 @@
+Name,Id,Email,Financial Status,Created at,Currency,Total,Discount Code,Lineitem name,Lineitem sku,Lineitem quantity,Lineitem price,Shipping Country,Accepts Marketing
+#1000,9000,anna.cole@example.com,paid,2026-08-01,USD,57.30,,Dust-free Cat Litter 10L,dust-free-cat-litter-10l,1,24.80,US,yes
+#1000,9000,anna.cole@example.com,paid,2026-08-01,USD,,,Salmon Cat Food 2kg,salmon-cat-food-2kg,1,32.50,US,yes
+#1001,9001,anna.cole@example.com,paid,2026-06-22,USD,32.50,,Salmon Cat Food 2kg,salmon-cat-food-2kg,1,32.50,US,yes
+#1002,9002,anna.cole@example.com,paid,2026-05-13,USD,24.80,,Dust-free Cat Litter 10L,dust-free-cat-litter-10l,1,24.80,US,yes
+#1003,9003,ben.ward@example.com,paid,2026-07-20,USD,64.00,,Grain-free Dog Food 5kg,grain-free-dog-food-5kg,1,48.00,US,yes
+#1003,9003,ben.ward@example.com,paid,2026-07-20,USD,,,Dental Chews,dental-chews,1,16.00,US,yes
+#1004,9004,ben.ward@example.com,paid,2026-06-10,USD,16.00,,Dental Chews,dental-chews,1,16.00,US,yes
+#1005,9005,ben.ward@example.com,paid,2026-05-01,USD,48.00,,Grain-free Dog Food 5kg,grain-free-dog-food-5kg,1,48.00,US,yes
+#1006,9006,ben.ward@example.com,paid,2026-03-22,USD,16.00,,Dental Chews,dental-chews,1,16.00,US,yes
+#1007,9007,cara.nguyen@example.com,paid,2026-08-15,USD,34.70,,Catnip Toys,catnip-toys,1,9.90,US,yes
+#1007,9007,cara.nguyen@example.com,paid,2026-08-15,USD,,,Dust-free Cat Litter 10L,dust-free-cat-litter-10l,1,24.80,US,yes
+#1008,9008,cara.nguyen@example.com,paid,2026-07-06,USD,24.80,,Dust-free Cat Litter 10L,dust-free-cat-litter-10l,1,24.80,US,yes
+#1009,9009,diego.ruiz@example.com,paid,2026-07-10,USD,54.50,,Arena sin polvo 10L,arena-sin-polvo-10l,1,22.00,MX,yes
+#1009,9009,diego.ruiz@example.com,paid,2026-07-10,USD,,,Salmon Cat Food 2kg,salmon-cat-food-2kg,1,32.50,MX,yes
+#1010,9010,diego.ruiz@example.com,paid,2026-05-31,USD,32.50,,Salmon Cat Food 2kg,salmon-cat-food-2kg,1,32.50,MX,yes
+#1011,9011,diego.ruiz@example.com,paid,2026-04-21,USD,22.00,,Arena sin polvo 10L,arena-sin-polvo-10l,1,22.00,MX,yes
+#1012,9012,elena.soto@example.com,paid,2026-08-05,USD,22.00,,Arena sin polvo 10L,arena-sin-polvo-10l,1,22.00,MX,yes
+#1013,9013,elena.soto@example.com,paid,2026-06-26,USD,22.00,,Arena sin polvo 10L,arena-sin-polvo-10l,1,22.00,MX,yes
+#1014,9014,felix.ortiz@example.com,paid,2026-06-30,USD,42.40,,Salmon Cat Food 2kg,salmon-cat-food-2kg,1,32.50,ES,yes
+#1014,9014,felix.ortiz@example.com,paid,2026-06-30,USD,,,Catnip Toys,catnip-toys,1,9.90,ES,yes
+#1015,9015,felix.ortiz@example.com,paid,2026-05-21,USD,9.90,,Catnip Toys,catnip-toys,1,9.90,ES,yes
+#1016,9016,felix.ortiz@example.com,paid,2026-04-11,USD,32.50,,Salmon Cat Food 2kg,salmon-cat-food-2kg,1,32.50,ES,yes
+#1017,9017,gina.perez@example.com,paid,2026-08-18,USD,48.00,,Grain-free Dog Food 5kg,grain-free-dog-food-5kg,1,48.00,ES,yes
+#1018,9018,gina.perez@example.com,paid,2026-07-09,USD,48.00,,Grain-free Dog Food 5kg,grain-free-dog-food-5kg,1,48.00,ES,yes
+#1019,9019,hugo.silva@example.com,paid,2026-07-02,USD,64.00,,Dental Chews,dental-chews,1,16.00,MX,yes
+#1019,9019,hugo.silva@example.com,paid,2026-07-02,USD,,,Grain-free Dog Food 5kg,grain-free-dog-food-5kg,1,48.00,MX,yes
+#1020,9020,hugo.silva@example.com,paid,2026-05-23,USD,48.00,,Grain-free Dog Food 5kg,grain-free-dog-food-5kg,1,48.00,MX,yes
+#1021,9021,hugo.silva@example.com,paid,2026-04-13,USD,16.00,,Dental Chews,dental-chews,1,16.00,MX,yes
+#1022,9022,hugo.silva@example.com,paid,2026-03-04,USD,48.00,,Grain-free Dog Food 5kg,grain-free-dog-food-5kg,1,48.00,MX,yes
+#1023,9023,hugo.silva@example.com,paid,2026-01-23,USD,16.00,,Dental Chews,dental-chews,1,16.00,MX,yes
+#1024,9024,ivy.brooks@example.com,paid,2026-08-22,USD,32.50,,Salmon Cat Food 2kg,salmon-cat-food-2kg,1,32.50,US,yes
+#1025,9025,ivy.brooks@example.com,paid,2026-07-13,USD,32.50,,Salmon Cat Food 2kg,salmon-cat-food-2kg,1,32.50,US,yes
+#1026,9026,ivy.brooks@example.com,paid,2026-06-03,USD,32.50,,Salmon Cat Food 2kg,salmon-cat-food-2kg,1,32.50,US,yes
+#1027,9027,jake.lin@example.com,paid,2026-08-28,USD,42.40,,Catnip Toys,catnip-toys,1,9.90,US,yes
+#1027,9027,jake.lin@example.com,paid,2026-08-28,USD,,,Salmon Cat Food 2kg,salmon-cat-food-2kg,1,32.50,US,yes
+#1028,9028,jake.lin@example.com,paid,2026-07-19,USD,32.50,,Salmon Cat Food 2kg,salmon-cat-food-2kg,1,32.50,US,yes
+#1029,9029,kara.moss@example.com,paid,2026-07-25,USD,48.00,,Grain-free Dog Food 5kg,grain-free-dog-food-5kg,1,48.00,GB,yes
+#1030,9030,kara.moss@example.com,paid,2026-06-15,USD,48.00,,Grain-free Dog Food 5kg,grain-free-dog-food-5kg,1,48.00,GB,yes
+#1031,9031,kara.moss@example.com,paid,2026-05-06,USD,48.00,,Grain-free Dog Food 5kg,grain-free-dog-food-5kg,1,48.00,GB,yes
+#1032,9032,luis.mora@example.com,paid,2026-08-12,USD,22.00,,Arena sin polvo 10L,arena-sin-polvo-10l,1,22.00,MX,yes
+#1033,9033,luis.mora@example.com,paid,2026-07-03,USD,22.00,,Arena sin polvo 10L,arena-sin-polvo-10l,1,22.00,MX,yes
+#1034,9034,mia.chen@example.com,paid,2026-06-15,USD,34.70,,Dust-free Cat Litter 10L,dust-free-cat-litter-10l,1,24.80,US,yes
+#1034,9034,mia.chen@example.com,paid,2026-06-15,USD,,,Catnip Toys,catnip-toys,1,9.90,US,yes
+#1035,9035,mia.chen@example.com,paid,2026-05-06,USD,9.90,,Catnip Toys,catnip-toys,1,9.90,US,yes
+#1036,9036,mia.chen@example.com,paid,2026-03-27,USD,24.80,,Dust-free Cat Litter 10L,dust-free-cat-litter-10l,1,24.80,US,yes
+#1037,9037,mia.chen@example.com,paid,2026-02-15,USD,9.90,,Catnip Toys,catnip-toys,1,9.90,US,yes
+#1038,9038,noah.diaz@example.com,paid,2026-07-08,USD,32.50,,Salmon Cat Food 2kg,salmon-cat-food-2kg,1,32.50,ES,yes
+#1039,9039,noah.diaz@example.com,paid,2026-05-29,USD,32.50,,Salmon Cat Food 2kg,salmon-cat-food-2kg,1,32.50,ES,yes
+#1040,9040,olga.reyes@example.com,paid,2026-08-08,USD,54.50,,Arena sin polvo 10L,arena-sin-polvo-10l,1,22.00,MX,yes
+#1040,9040,olga.reyes@example.com,paid,2026-08-08,USD,,,Salmon Cat Food 2kg,salmon-cat-food-2kg,1,32.50,MX,yes
+#1041,9041,olga.reyes@example.com,paid,2026-06-29,USD,32.50,,Salmon Cat Food 2kg,salmon-cat-food-2kg,1,32.50,MX,yes
+#1042,9042,olga.reyes@example.com,paid,2026-05-20,USD,22.00,,Arena sin polvo 10L,arena-sin-polvo-10l,1,22.00,MX,yes
+#1043,9043,pete.shaw@example.com,paid,2026-10-20,USD,16.00,,Dental Chews,dental-chews,1,16.00,US,yes
+#1044,9044,quinn.hall@example.com,paid,2026-10-18,USD,9.90,,Catnip Toys,catnip-toys,1,9.90,GB,yes
+#1045,9045,rosa.vega@example.com,paid,2026-10-12,USD,22.00,,Arena sin polvo 10L,arena-sin-polvo-10l,1,22.00,MX,yes
+#1046,9046,sam.owen@example.com,paid,2026-10-08,USD,32.50,,Salmon Cat Food 2kg,salmon-cat-food-2kg,1,32.50,US,yes
+#1047,9047,tess.park@example.com,paid,2026-10-25,USD,48.00,,Grain-free Dog Food 5kg,grain-free-dog-food-5kg,1,48.00,GB,yes
+#1048,9048,uma.wells@example.com,paid,2026-07-01,USD,24.80,,Dust-free Cat Litter 10L,dust-free-cat-litter-10l,1,24.80,US,no
+#1049,9049,uma.wells@example.com,paid,2026-05-22,USD,24.80,,Dust-free Cat Litter 10L,dust-free-cat-litter-10l,1,24.80,US,no
+#1050,9050,victor.cruz@example.com,paid,2026-08-01,USD,22.00,,Arena sin polvo 10L,arena-sin-polvo-10l,1,22.00,MX,no
+#1051,9051,victor.cruz@example.com,paid,2026-06-22,USD,22.00,,Arena sin polvo 10L,arena-sin-polvo-10l,1,22.00,MX,no
+#1052,9052,wendy.fox@example.com,paid,2026-06-20,USD,16.00,,Dental Chews,dental-chews,1,16.00,US,no
+#1053,9053,wendy.fox@example.com,paid,2026-05-11,USD,16.00,,Dental Chews,dental-chews,1,16.00,US,no
+#1054,9054,wendy.fox@example.com,paid,2026-04-01,USD,16.00,,Dental Chews,dental-chews,1,16.00,US,no
+#1055,9055,xavier.gil@example.com,paid,2026-07-18,USD,32.50,,Salmon Cat Food 2kg,salmon-cat-food-2kg,1,32.50,ES,no
+#1056,9056,xavier.gil@example.com,paid,2026-06-08,USD,32.50,,Salmon Cat Food 2kg,salmon-cat-food-2kg,1,32.50,ES,no
+#1057,9057,yara.kim@example.com,paid,2026-08-10,USD,9.90,,Catnip Toys,catnip-toys,1,9.90,US,no
+#1058,9058,yara.kim@example.com,paid,2026-07-01,USD,9.90,,Catnip Toys,catnip-toys,1,9.90,US,no
+#1059,9059,zane.bell@example.com,paid,2026-07-12,USD,24.80,,Dust-free Cat Litter 10L,dust-free-cat-litter-10l,1,24.80,US,yes
+#1060,9060,alicia.nunez@example.com,paid,2026-08-02,USD,22.00,,Arena sin polvo 10L,arena-sin-polvo-10l,1,22.00,MX,yes
+#1061,9061,blake.young@example.com,paid,2026-06-28,USD,48.00,,Grain-free Dog Food 5kg,grain-free-dog-food-5kg,1,48.00,US,yes
+#1062,9062,clara.ives@example.com,paid,2026-07-30,USD,9.90,,Catnip Toys,catnip-toys,1,9.90,GB,yes
+#1063,9063,david.khan@example.com,paid,2026-08-19,USD,32.50,,Salmon Cat Food 2kg,salmon-cat-food-2kg,1,32.50,US,yes
+#1064,9064,eva.lopez@example.com,paid,2026-07-14,USD,54.50,,Arena sin polvo 10L,arena-sin-polvo-10l,1,22.00,ES,yes
+#1064,9064,eva.lopez@example.com,paid,2026-07-14,USD,,,Salmon Cat Food 2kg,salmon-cat-food-2kg,1,32.50,ES,yes
+#1065,9065,eva.lopez@example.com,paid,2026-06-04,USD,32.50,,Salmon Cat Food 2kg,salmon-cat-food-2kg,1,32.50,ES,yes
+#1066,9066,eva.lopez@example.com,paid,2026-04-25,USD,22.00,,Arena sin polvo 10L,arena-sin-polvo-10l,1,22.00,ES,yes
+#1067,9067,eva.lopez@example.com,paid,2026-03-16,USD,32.50,,Salmon Cat Food 2kg,salmon-cat-food-2kg,1,32.50,ES,yes
+#1068,9068,finn.moore@example.com,paid,2026-08-04,USD,64.00,,Dental Chews,dental-chews,1,16.00,US,yes
+#1068,9068,finn.moore@example.com,paid,2026-08-04,USD,,,Grain-free Dog Food 5kg,grain-free-dog-food-5kg,1,48.00,US,yes
+#1069,9069,finn.moore@example.com,paid,2026-06-25,USD,48.00,,Grain-free Dog Food 5kg,grain-free-dog-food-5kg,1,48.00,US,yes
+#1070,9070,finn.moore@example.com,paid,2026-05-16,USD,16.00,,Dental Chews,dental-chews,1,16.00,US,yes
+#1071,9071,grace.tao@example.com,paid,2026-09-02,USD,24.80,,Dust-free Cat Litter 10L,dust-free-cat-litter-10l,1,24.80,US,yes
+#1072,9072,grace.tao@example.com,paid,2026-07-24,USD,24.80,,Dust-free Cat Litter 10L,dust-free-cat-litter-10l,1,24.80,US,yes
+#1073,9073,hector.ramos@example.com,paid,2026-09-01,USD,22.00,,Arena sin polvo 10L,arena-sin-polvo-10l,1,22.00,MX,yes
+#1074,9074,hector.ramos@example.com,paid,2026-07-23,USD,22.00,,Arena sin polvo 10L,arena-sin-polvo-10l,1,22.00,MX,yes
+#1075,9075,iris.pope@example.com,paid,2026-09-03,USD,9.90,,Catnip Toys,catnip-toys,1,9.90,US,yes
+#1076,9076,iris.pope@example.com,paid,2026-07-25,USD,9.90,,Catnip Toys,catnip-toys,1,9.90,US,yes
+#1077,9077,jon.west@example.com,paid,2026-10-01,USD,32.50,,Salmon Cat Food 2kg,salmon-cat-food-2kg,1,32.50,US,yes
+#1078,9078,jon.west@example.com,paid,2026-08-22,USD,32.50,,Salmon Cat Food 2kg,salmon-cat-food-2kg,1,32.50,US,yes
+#1079,9079,keira.bond@example.com,paid,2026-10-05,USD,48.00,,Grain-free Dog Food 5kg,grain-free-dog-food-5kg,1,48.00,GB,yes
+#1080,9080,keira.bond@example.com,paid,2026-08-26,USD,48.00,,Grain-free Dog Food 5kg,grain-free-dog-food-5kg,1,48.00,GB,yes
+#1081,9081,leo.cano@example.com,paid,2026-08-25,USD,32.50,,Salmon Cat Food 2kg,salmon-cat-food-2kg,1,32.50,ES,yes
+#1082,9082,mona.hart@example.com,paid,2026-08-11,USD,57.30,,Dust-free Cat Litter 10L,dust-free-cat-litter-10l,1,24.80,US,yes
+#1082,9082,mona.hart@example.com,paid,2026-08-11,USD,,,Salmon Cat Food 2kg,salmon-cat-food-2kg,1,32.50,US,yes
+#1083,9083,mona.hart@example.com,paid,2026-07-02,USD,32.50,,Salmon Cat Food 2kg,salmon-cat-food-2kg,1,32.50,US,yes
+#1084,9084,mona.hart@example.com,paid,2026-05-23,USD,9.90,,Catnip Toys,catnip-toys,1,9.90,US,yes
+#1085,9085,nico.paz@example.com,paid,2026-07-28,USD,22.00,,Arena sin polvo 10L,arena-sin-polvo-10l,1,22.00,MX,yes
+#1086,9086,nico.paz@example.com,paid,2026-06-18,USD,22.00,,Arena sin polvo 10L,arena-sin-polvo-10l,1,22.00,MX,yes

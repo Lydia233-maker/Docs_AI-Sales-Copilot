@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "noEmit": true,
+    "types": ["node"],
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src/app.ts", "src/server.ts", "src/db.ts", "src/csv.ts", "src/eligibility.ts", "src/templates.ts", "src/seed.ts"]
+}
