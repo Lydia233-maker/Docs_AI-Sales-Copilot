@@ -1,2 +1,2 @@
-/** 占位。导入页和公司地址页以后从 App.tsx 拆到这里，当前还没有接上路由。 */
-export const plannedPages = ["import", "store-address"] as const;
+/** 导入页已经接在 App.tsx 的 /import。公司地址页以后再从这里接上。 */
+export const plannedPages = ["store-address"] as const;

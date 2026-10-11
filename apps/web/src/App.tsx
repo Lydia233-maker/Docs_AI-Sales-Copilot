@@ -5,6 +5,7 @@ import {
   api,
   type Customer,
   type CustomerDetail,
+  type ImportPreview,
   type Draft,
   type Outreach,
   type OutreachListItem,
@@ -37,6 +38,9 @@ function Shell({ children, store }: { children: ReactNode; store: string }) {
         <h1>AI 定向营销助手<br />{store}</h1>
         <Link className={loc.pathname.startsWith('/customers') ? 'active' : ''} to="/customers">
           客户
+        </Link>
+        <Link className={loc.pathname.startsWith('/import') ? 'active' : ''} to="/import">
+          导入
         </Link>
         <Link className={loc.pathname.startsWith('/audience') ? 'active' : ''} to="/audience">
           挑选客户
@@ -304,6 +308,116 @@ function CustomerPage() {
             添加备注
           </button>
         </p>
+      </div>
+    </div>
+  );
+}
+
+function readFile(file: File) {
+  return file.text();
+}
+
+function ImportPage() {
+  const [customersFile, setCustomersFile] = useState<File | null>(null);
+  const [ordersFile, setOrdersFile] = useState<File | null>(null);
+  const [customersCsv, setCustomersCsv] = useState('');
+  const [ordersCsv, setOrdersCsv] = useState('');
+  const [preview, setPreview] = useState<ImportPreview | null>(null);
+  const [beforeCount, setBeforeCount] = useState<number | null>(null);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <div>
+      <h2>导入</h2>
+      <div className="card">
+        <p className="muted">先预览。确认之前不会写入客户和订单。</p>
+        <label>客户 CSV</label>
+        <input
+          type="file"
+          accept=".csv,text/csv"
+          onChange={(event) => {
+            setCustomersFile(event.target.files?.[0] ?? null);
+            setPreview(null);
+            setMessage('');
+          }}
+        />
+        <label>订单 CSV</label>
+        <input
+          type="file"
+          accept=".csv,text/csv"
+          onChange={(event) => {
+            setOrdersFile(event.target.files?.[0] ?? null);
+            setPreview(null);
+            setMessage('');
+          }}
+        />
+        <p>
+          <button
+            className="btn secondary"
+            disabled={busy || !customersFile || !ordersFile}
+            onClick={async () => {
+              if (!customersFile || !ordersFile) return;
+              setBusy(true);
+              setError('');
+              setMessage('');
+              try {
+                const [customersText, ordersText] = await Promise.all([readFile(customersFile), readFile(ordersFile)]);
+                const current = await api.customers();
+                const next = await api.previewImport(customersText, ordersText);
+                const after = await api.customers();
+                setCustomersCsv(customersText);
+                setOrdersCsv(ordersText);
+                setPreview(next);
+                setBeforeCount(current.total);
+                if (after.total !== current.total) {
+                  setError('预览改动了客户人数，请先不要确认。');
+                }
+              } catch (err) {
+                setPreview(null);
+                setError(err instanceof Error ? err.message : '预览失败');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            预览
+          </button>
+        </p>
+        {preview && (
+          <div>
+            <p>
+              文件里有客户 {preview.customers} 人，其中西班牙语 {preview.spanish} 人，备注 {preview.notes} 条。订单{' '}
+              {preview.orders} 笔
+              {preview.unmatchedOrders > 0 ? `，其中 ${preview.unmatchedOrders} 笔对不上这次的客户表` : ''}。
+            </p>
+            <p className="muted">当前客户列表仍是 {beforeCount ?? preview.storeCustomers} 人，还没有写入。</p>
+            <p>
+              <button
+                className="btn"
+                disabled={busy || !customersCsv || !ordersCsv}
+                onClick={async () => {
+                  setBusy(true);
+                  setError('');
+                  try {
+                    const saved = await api.confirmImport(customersCsv, ordersCsv);
+                    setMessage(`已导入。客户 ${saved.customers} 人，西班牙语 ${saved.spanish} 人，订单 ${saved.orders} 笔。`);
+                    setPreview(null);
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : '导入失败');
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                确认导入
+              </button>
+            </p>
+          </div>
+        )}
+        {message && <p>{message}</p>}
+        {error && <p className="danger">{error}</p>}
       </div>
     </div>
   );
@@ -620,6 +734,14 @@ export function App() {
         element={
           <Guard>
             <CustomerPage />
+          </Guard>
+        }
+      />
+      <Route
+        path="/import"
+        element={
+          <Guard>
+            <ImportPage />
           </Guard>
         }
       />

@@ -129,6 +129,13 @@ export const AddPreferenceTagBody = z.object({
   tag: z.string().trim().min(1, '标签不能为空').max(40, '标签最多 40 个字'),
 });
 
+export const ImportCustomerOrdersBody = z
+  .object({
+    customersCsv: z.string().min(1, '请上传客户 CSV'),
+    ordersCsv: z.string().min(1, '请上传订单 CSV'),
+  })
+  .strict();
+
 export const PreviewAudienceBody = z.object({
   scenario: z.enum(SCENARIOS),
   language: z.enum(LANGUAGES).optional(),

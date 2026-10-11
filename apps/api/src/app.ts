@@ -9,6 +9,7 @@ import {
   CustomerBriefSchema,
   ErrorCodes,
   LoginBody,
+  ImportCustomerOrdersBody,
   PreviewAudienceBody,
   ReviewDraftBody,
   UpdateDraftBody,
@@ -16,6 +17,7 @@ import {
 } from '@copilot/shared';
 import { appToday, db, nowIso, uuid } from './db.ts';
 import { daysBetween } from './csv.ts';
+import { applyCustomerOrders, previewCustomerOrders } from './imports/index.ts';
 import { exclusionReason, isEmailEligible } from './eligibility.ts';
 import { checkDraft, detectPrivacy, generateTemplate, redactNote, renderCopy } from './templates.ts';
 
@@ -232,6 +234,24 @@ export async function buildApp() {
         createdAtShop: purchase.created_at_shop,
       })),
     };
+  });
+
+  app.post('/api/v1/imports/preview', async (req, reply) => {
+    const auth = (req as typeof req & { auth: Authed }).auth;
+    const parsed = ImportCustomerOrdersBody.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(errorBody(ErrorCodes.VALIDATION_FAILED, parsed.error.issues[0]?.message || '请上传客户和订单 CSV'));
+    }
+    return previewCustomerOrders(auth.storeId, parsed.data.customersCsv, parsed.data.ordersCsv);
+  });
+
+  app.post('/api/v1/imports/customers-orders', async (req, reply) => {
+    const auth = (req as typeof req & { auth: Authed }).auth;
+    const parsed = ImportCustomerOrdersBody.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(errorBody(ErrorCodes.VALIDATION_FAILED, parsed.error.issues[0]?.message || '请上传客户和订单 CSV'));
+    }
+    return applyCustomerOrders(auth.storeId, parsed.data.customersCsv, parsed.data.ordersCsv);
   });
 
   app.post('/api/v1/customers/:id/notes', async (req, reply) => {

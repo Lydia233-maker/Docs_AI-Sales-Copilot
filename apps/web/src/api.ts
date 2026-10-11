@@ -23,6 +23,16 @@ export const api = {
   logout: () => request('/api/v1/auth/logout', { method: 'POST' }),
   me: () => request<{ store: { name: string; company_address: string } }>('/api/v1/auth/me'),
   customers: (query = '') => request<{ items: Customer[]; total: number }>(`/api/v1/customers${query}`),
+  previewImport: (customersCsv: string, ordersCsv: string) =>
+    request<ImportPreview>('/api/v1/imports/preview', {
+      method: 'POST',
+      body: JSON.stringify({ customersCsv, ordersCsv }),
+    }),
+  confirmImport: (customersCsv: string, ordersCsv: string) =>
+    request<{ customers: number; spanish: number; orders: number }>('/api/v1/imports/customers-orders', {
+      method: 'POST',
+      body: JSON.stringify({ customersCsv, ordersCsv }),
+    }),
   customer: (id: string) => request<CustomerDetail>(`/api/v1/customers/${id}`),
   addNote: (id: string, text: string) =>
     request<{ privacyWarnings: string[] }>(`/api/v1/customers/${id}/notes`, {
@@ -50,6 +60,18 @@ export const api = {
     }),
   renderDraft: (id: string) => request<{ subject: string; body: string }>(`/api/v1/drafts/${id}/rendered`),
   send: (id: string) => request<{ sent: number; sender: string }>(`/api/v1/outreach/${id}/send`, { method: 'POST' }),
+};
+
+export type ImportPreview = {
+  customerRows: number;
+  customers: number;
+  skippedCustomers: number;
+  spanish: number;
+  notes: number;
+  orderRows: number;
+  orders: number;
+  unmatchedOrders: number;
+  storeCustomers: number;
 };
 
 export type Customer = {
