@@ -53,7 +53,7 @@ pnpm dev
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | 目录、请求路径、数据流 |
 | [ROADMAP.md](./ROADMAP.md) | 已完成、未开工、需求里已确认但未实现 |
 | [CHANGELOG.md](./CHANGELOG.md) | 按提交整理的变更 |
-| [TODO.md](./TODO.md) | 未做功能、已知问题、技术债。优先级还没排 |
+| [TODO.md](./TODO.md) | 下一版必做清单、已知问题、技术债 |
 | [SHOPIFY_SAMPLE_TEST.md](./SHOPIFY_SAMPLE_TEST.md) | 用 Shopify 公开样例对过导入后的结果 |
 | [05-当前版本总结.md](./05-当前版本总结.md) | 同一初稿的中文说明，含踩坑 |
 
