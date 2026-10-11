@@ -1,130 +1,142 @@
 # 04 Agent 分工与协作
 
-> 版本：V0.1（第一阶段）
-> 状态：规划稿，等待负责人确认
+> 版本：V1（第一版，可试用版）
+> 状态：规划稿，等待负责人确认后开工
 > 前置文档：[02 技术方案与目录结构](./02-技术方案与目录结构.md)、[03 验收标准](./03-验收标准.md)
 
-## 1. 分工总览
+## 1. 角色与边界
 
-| Agent | 职责一句话 | 负责的目录 | 对应的验收条目 |
+| 角色 | 职责 | 唯一可以修改的路径 | 对应的验收条目 |
 | --- | --- | --- | --- |
-| **A：数据与分群后端** | 搭好后端骨架，把店铺数据导进来，算出客户画像和分群 | `backend/` 中除 B 负责部分以外的全部，`docker-compose.yml` | G 系列，F1、F2、F3（计算）、F4（后端）、F11（后端） |
-| **B：AI 营销内容后端** | 把分群变成营销活动，用大模型生成内容，完成合规检查、审核和导出 | `backend/app/ai/`、`campaigns/`、`exports/`，B 的模型、迁移、测试和种子脚本 | F5～F10（后端） |
-| **C：前端** | 做出卖家能完整走通流程的界面 | `frontend/` 全部 | F3、F4、F5～F9、F11 的界面部分 |
+| **主 Agent** | 定接口、搭仓库骨架、准备演示和契约数据、审查与合并 PR、协调接口变更、维护文档 | `packages/shared/`、`docs/`、`fixtures/`、根目录配置文件（`package.json`、`pnpm-workspace.yaml`、`pnpm-lock.yaml`、`tsconfig.base.json`、lint 配置、`.env.example`、`.gitignore`、`Dockerfile`、`docker-compose.yml`、`README.md`、`.github/`、`scripts/`） | G3、G4、K1、K2、P1、P4 |
+| **Agent A：前端** | 卖家使用的全部中文界面 | **只能修改 `apps/web/`** | G6、S6、H1、H3、R4、R5 和 E2 的界面部分，以及各页面的组件测试 |
+| **Agent B：后端** | API、数据导入、分群、大模型路由、文案检查、发送、追踪、合规、删除、脚本 | **只能修改 `apps/api/`** | D、S、H、M、R、E、T、C、K3～K5、P2、P3 的实现与单元测试 |
+| **Agent C：端到端测试与验收** | 端到端测试、接口契约和合规测试、伪造的外部服务、一键验收报告、演示录屏 | **只能修改 `tests/e2e/`** | 03 中全部标注为 E2E 和 API 的条目，以及第 12 节的演示 |
 
-具体的文件归属以 [02 第 7 节目录结构](./02-技术方案与目录结构.md#7-目录结构) 中的 `[A]`、`[B]`、`[C]` 标注为准。
+硬性规则：
 
-## 2. 工作方式：独立 worktree
+1. **子 Agent 之间不能修改对方的文件**，也不能修改主 Agent 的文件（第 5 节允许的 `pnpm-lock.yaml` 变化除外）。
+2. **接口（`packages/shared`）只能由主 Agent 修改。** 子 Agent 不能在自己的目录中复制或重新定义接口类型来绕开这条规则。
+3. 每个子 Agent 在**独立的 git worktree 和独立的分支**上工作。
+4. 违反路径归属的 PR 会被 CI 中的归属检查拦截（见第 5 节）。
 
-每个 Agent 在自己的 git worktree 和分支上工作，互相不切换对方的分支。
-
-```bash
-# 在主仓库目录执行（以 main 为基线）
-git fetch origin main
-git worktree add ../copilot-agent-a -b cursor/agent-a-data-segments-<suffix> origin/main
-git worktree add ../copilot-agent-b -b cursor/agent-b-ai-campaigns-<suffix> origin/main
-git worktree add ../copilot-agent-c -b cursor/agent-c-frontend-<suffix> origin/main
-```
-
-- 分支命名遵循 `cursor/<描述>-<suffix>`，全部使用小写字母；`<suffix>` 由运行该 Agent 的环境指定。
-- 一个 Agent 可以拆分多个 PR（见第 3 节的里程碑），每个 PR 单独开分支，目标分支都是 `main`。
-- 每完成一个逻辑上独立的改动，就提交一次并推送；提交信息使用 `feat:`、`fix:`、`test:`、`docs:`、`chore:` 前缀。
-- PR 默认以草稿形式创建，自测通过（满足 [03 第 1 节](./03-验收标准.md#1-通用完成标准每个-agent-的每个-pr-都适用) 的通用完成标准）后再标记为可审阅。
-- 需要依赖对方尚未合并的代码时，**rebase 到 `main`**，不要把对方的分支合并进自己的分支。
-
-## 3. 里程碑与合并顺序
+## 2. 里程碑
 
 ```
-M0 骨架（A） ──► M1 并行开发（A / B / C 同时进行） ──► M2 联调 ──► M3 验收
+M0 接口与骨架（主）──► 负责人确认 ──► M1 并行实现（A / B / C）──► M2 联调 ──► M3 验收与试用准备
 ```
 
-### M0：骨架与契约（A 单独完成，作为第一个 PR，尽量小）
+### M0：接口与骨架（主 Agent，负责人确认文档后开始）
 
-A 提交并合并以下内容后，B 和 C 再基于最新的 `main` 开始工作：
+主 Agent 提交一个 PR，合并后 A、B、C 才开始工作。内容如下：
 
-- 后端工程骨架：`app/main.py`、`core/`（配置、数据库会话、统一错误格式）、`models/base.py`、Alembic 初始迁移、`GET /health`。
-- `docker-compose.yml`、`.env.example`、根目录 `README.md` 的快速开始部分。
-- `app/segments/schemas.py` 中的 `SegmentFeatures` 和 `CustomerExportRow` 模型，以及 `app/segments/service.py` 中三个函数的**桩实现**（签名见 [02 第 8 节](./02-技术方案与目录结构.md#8-模块间的-python-接口a-提供给-b)）。
-- `scripts/run_acceptance.py` 框架：按步骤登记检查项，汇总输出结果。
+1. **仓库骨架**：根目录的 `package.json`（脚本：`dev`、`build`、`test`、`lint`、`e2e`、`acceptance`）、`pnpm-workspace.yaml`、`tsconfig.base.json`、lint 和格式化配置、`.gitignore`、`.env.example`（只有变量名）。
+2. **`packages/shared` 完整的第一版接口**：02 第 6 节中的全部枚举、占位符白名单、错误码、各领域的 Zod schema，以及 `api.ts` 接口清单。附带 schema 自身的单元测试和 `CHANGELOG.md`。
+3. **三个应用的最小空壳**：`apps/web`、`apps/api`、`tests/e2e` 各自的 `package.json`、`tsconfig.json` 和空入口，并预先安装 02 第 2 节中计划使用的依赖，让 lockfile 基本稳定。**M0 合并后，这三个目录的归属分别转交给 A、B、C。**
+4. **`fixtures/`**：宠物用品演示数据（Shopify 导出格式的客户、订单、弃单、商品 CSV，以及“发送后订单”文件）、错误样例，以及 `fixtures/README.md`。说明文件中写明各场景的期望人数、指定客户的期望画像和期望转化结果，供 B 的单元测试和 C 的验收测试共同使用。
+   - 演示数据规模约为 300 位客户、900 笔订单；覆盖英语和西班牙语国家；覆盖 5 个场景、3 个消费层级；包含未同意营销、手机号无效、带 `lang:` 标签、多商品、退款等边界情况。
+5. **CI**：`.github/workflows/ci.yml` 运行安装、构建、lint、测试、密钥扫描（K1、K2），以及路径归属检查脚本 `scripts/check-ownership.mjs`。
 
-C 不依赖 M0 的后端功能，可以同时搭建前端骨架；但前端 PR 需要在 M0 合并后再 rebase。
+### M1：并行实现
 
-### M1：并行开发
+三个子 Agent 同时开工，每人按下表顺序拆分成多个小 PR。每个 PR 都基于最新的 `main`。
 
-| Agent | 建议拆分的 PR（按顺序） |
-| --- | --- |
-| A | ① 核心模型与迁移（店铺、客户、订单、导入批次）→ ② CSV 预览、校验与入库，加样例数据 → ③ 客户指标计算 → ④ 预置分群、快照与特征函数（替换 M0 中的桩）→ ⑤ 自定义分群规则与字段接口 → ⑥ 简单登录与操作日志（P1） |
-| B | ① 活动、模板、内容、生成记录、导出的模型与迁移（编号 0100 起）→ ② 供应商抽象与 Mock 供应商，加提示词模板种子 → ③ 生成服务与活动接口（先使用 A 的桩）→ ④ 合规检查、编辑与审核接口 → ⑤ 导出接口 → ⑥ 真实供应商接入与人工试跑 |
-| C | ① 前端骨架、路由、布局、请求封装和 `api/mocks/` → ② 店铺设置与数据导入页 → ③ 分群列表与详情页 → ④ 活动创建向导 → ⑤ 内容版本对比、中文对照、编辑、审核和合规提示 → ⑥ 导出页与风险确认 → ⑦ 登录页（P1） |
+| 顺序 | Agent B（apps/api） | Agent A（apps/web） | Agent C（tests/e2e） |
+| --- | --- | --- | --- |
+| 1 | 配置读取、数据库 schema 与迁移、Fastify 应用、`/health`、登录与会话、`create-user` 脚本 | 应用框架：路由、布局、登录页、基于 shared 的请求客户端、MSW 模拟接口 | 测试基础设施：启动 API 和 Web、独立的测试数据库、伪造的大模型服务（可编程返回成功、500 错误或非法 JSON）、伪造的 SMTP 服务 |
+| 2 | `shopify-csv` 适配器、导入预览与入库、客户画像重算、`seed-demo` 脚本 | 数据导入页（上传、预览、错误行、确认）、客户列表与详情 | 契约测试：按 `api.ts` 逐个接口校验响应结构（G5） |
+| 3 | 场景分群与分层预览、营销节点 | 首页（营销节点、概览）、分群页 | 数据和分群的 API 测试（D、S、H） |
+| 4 | 大模型路由链与模板供应商、文案生成、中文对照、规则检查与 AI 检查 | 活动创建向导、文案对比与中文对照、编辑与审核、问题提示 | 模型与审核测试（M、R），包括降级和个人信息隔离 |
+| 5 | 收件人冻结、发送预览、模拟发送和 SMTP 发送、WhatsApp 导出、退订页面、追踪 | 发送确认页、WhatsApp 导出、活动报表 | 发送、追踪和合规测试（E、T、C） |
+| 6 | 转化计算、客户删除与清空店铺、审计日志、对照组和频率限制（P1） | 设置页（店铺信息、语言映射、复购周期、删除客户、清空店铺） | 端到端流程测试、`acceptance/run.ts` 报告、安全测试（K3～K5） |
 
-依赖说明：
+并行开发时的依赖处理：
 
-- B 的 ③ 可以基于 A 的桩开发和测试；**A 的 ④ 合并后**，B 需要 rebase，并用真实的快照数据补充一条集成测试。
-- C 在 M1 期间一律使用 `api/mocks/` 中的假数据，假数据的结构必须与 [02 第 6 节](./02-技术方案与目录结构.md#6-接口约定前后端契约) 一致；通过 `VITE_USE_MOCKS=true/false` 切换。
+- **A 不等 B**：A 始终可以使用 MSW 模拟接口开发，模拟数据由 shared schema 生成，结构保证和真实接口一致。通过 `VITE_USE_MOCKS=true/false` 切换。
+- **C 不等 A 和 B 合并**：C 可以先完成测试基础设施和测试用例；为了运行测试，可以**只读地**把 A 或 B 已推送的分支检出到临时目录运行，但不能向对方的分支提交。尚未实现的功能对应的测试，先标记为 `test.fixme` 并注明依赖。
+- **B 不依赖 A 和 C**：B 的单元测试使用 `fixtures/` 和自己的伪造服务。
 
 ### M2：联调
 
-- 前提：A 的 ①～④ 和 B 的 ①～⑤ 已经合并。
-- C 关闭 mocks，连接真实后端，逐页修正类型和交互；发现接口问题时，在对应 Agent 的 PR 或 `docs/api-changelog.md` 中记录，由接口负责人修复。
-- A、B、C 各自在 `run_acceptance.py` 中补充自己负责的检查步骤。
+- 前提：B 的 1～5 和 A 的 1～5 已经合并。
+- A 关闭 MSW，连接真实 API 逐页验证；C 去掉 `test.fixme`，运行全部测试。
+- C 发现缺陷时，在**对应 Agent 的 PR 中评论**，或在 PR 描述中列出缺陷清单，写明复现步骤和对应的验收条目编号。由 A 或 B 在自己的分支中修复，C 不直接修改对方代码。
+- 发现接口问题时，走第 4 节的接口变更流程。
 
-### M3：验收
+### M3：验收与试用准备
 
-- 按 [03 第 3 节](./03-验收标准.md#3-端到端演示脚本最终验收) 的演示脚本，在干净的环境中完整执行一次。
-- 由负责人或指定的审阅者逐条勾选 03 中的验收条目，结果记录在 `docs/验收记录.md` 中。
+- C 在干净、离线、没有 Key 的环境中运行 03 第 12 节的演示脚本，输出验收报告 `tests/e2e/reports/acceptance-report.md`，并录制演示视频。
+- 主 Agent 根据报告逐条核对 03，补充 README 中的部署和试用说明，确认合规条目（C1～C10）全部通过后，交给负责人。
+- 负责人提供 Key 和真实导出文件后，补充完成 M10 和 P5 的人工验收。
 
-## 4. 共享文件修改规则
+## 3. Worktree 与分支
 
-| 文件 | 所有者 | 其他 Agent 可以做的修改 |
-| --- | --- | --- |
-| `backend/app/main.py` | A | B 只能追加 `include_router(...)` 行，以及对应的 import |
-| `backend/requirements.txt` 或 `pyproject.toml` | A | B 可以追加依赖，按字母顺序插入，并在 PR 中说明用途 |
-| `backend/app/models/__init__.py` | A | B 只能追加导入自己模型的行 |
-| `.env.example` | A | B 只能追加 `LLM_*` 等自己需要的变量，并附注释 |
-| `backend/scripts/run_acceptance.py` | A | B、C 只能在各自的步骤区块中增加检查 |
-| `docs/02-技术方案与目录结构.md` 第 6、8 节 | 接口负责人 | 修改接口时，接口负责人在同一个 PR 中更新文档；其他人通过 PR 评论提出修改 |
-| `README.md` | A | B、C 可以在各自的小节中补充说明 |
+主 Agent 在 M0 合并后创建三个 worktree，分别交给三个子 Agent：
 
-其他规则：
+```bash
+git fetch origin main
+git worktree add ../copilot-a-web -b cursor/agent-a-web-0805 origin/main
+git worktree add ../copilot-b-api -b cursor/agent-b-api-0805 origin/main
+git worktree add ../copilot-c-e2e -b cursor/agent-c-e2e-0805 origin/main
+```
 
-- **迁移编号分段**：A 使用 `0001`～`0099`，B 使用 `0100`～`0199`，避免两个分支同时新增迁移时产生冲突。B 的第一个迁移将 `down_revision` 指向合并时 A 的最新迁移；如果 rebase 后迁移链分叉，由 B 负责修正。
-- **不修改对方的测试**：发现对方的测试有问题时，在对方的 PR 中评论，或者开一个小 PR 并请对方审阅。
-- **接口变更流程**：接口负责人先在 PR 中修改 02 第 6 节并说明原因，然后修改代码；C 依据合并后的文档更新 `types.ts`。
+- 分支名格式为 `cursor/agent-<a|b|c>-<范围>-0805`，全部小写。一个 Agent 有多个 PR 时，每个 PR 单独开分支，例如 `cursor/agent-b-api-imports-0805`。
+- 所有 PR 的目标分支都是 `main`，默认以草稿形式创建，满足 03 第 1 节的通用标准后再标记为可审阅。
+- 同步上游时，只能 **rebase 到 `origin/main`**，不能合并其他子 Agent 的分支。
+- 提交信息使用 `feat(web|api|e2e):`、`fix(...)`、`test(...)`、`chore(...)` 前缀；每个逻辑上独立的改动单独提交。
+- 只有主 Agent 合并 PR。
 
-## 5. 协作与沟通
+## 4. 接口变更流程
 
-- 所有协作通过 PR 完成：PR 描述、评论和 `docs/` 中的文档是唯一可信的信息来源，不依赖口头约定。
-- 每个 PR 的描述包含：对应的里程碑和编号（例如“A-M1-②”）、覆盖的验收条目编号、验证方式、已知限制，以及对其他 Agent 的影响（如果有）。
-- 遇到被阻塞的情况（例如等待对方的接口），先使用桩或 mocks 继续开发，并在 PR 中注明“依赖 X 的 Y，当前使用桩”。
-- 发现需求或技术方案中存在缺漏或矛盾时，不要自行扩大范围；在 PR 中提出问题，等负责人决定后再修改 01 或 02。
+1. 子 Agent 发现 shared 中的接口不够用或有错误时，**不能自行修改**，也不能在自己的目录里临时定义替代类型。
+2. 在自己的 PR 描述中增加“接口变更请求”小节，写明：涉及的接口名称、现状、期望的修改、原因，以及对其他 Agent 的影响。在新接口合并之前，可以用 `// TODO(shared-change): <请求标题>` 标记临时的绕行代码。
+3. 主 Agent 评估后，单独提交一个 shared PR，同时更新 02 第 6 节和 `packages/shared/CHANGELOG.md`。修改不兼容时，需要在 PR 中写明 A、B、C 各自需要做的修改。
+4. 合并后，主 Agent 在受影响的子 Agent PR 中评论，通知 rebase。
+5. 在 M1 期间，主 Agent 优先只做**向后兼容**的修改（新增字段、新增接口）。
 
-## 6. 各 Agent 的启动清单
+## 5. 共享资源规则
 
-### Agent A
+| 资源 | 规则 |
+| --- | --- |
+| `pnpm-lock.yaml` | 由主 Agent 所有。子 Agent **只能**在自己的 `package.json` 中新增依赖，并提交由此产生的 lockfile 变化；PR 描述中说明新增依赖的用途。发生 lockfile 冲突时，由主 Agent 在合并时重新执行 `pnpm install` 解决，子 Agent 不需要处理 |
+| 根目录 `package.json` 的脚本 | 由主 Agent 所有。子 Agent 需要新增根目录脚本时，通过接口变更请求的方式提出 |
+| `fixtures/` | 由主 Agent 所有。C 需要额外的边界数据时，放在 `tests/e2e/fixtures/`；B 的单元测试需要的私有数据放在 `apps/api/test/fixtures/` |
+| `.env.example` | 由主 Agent 所有。B 需要新的环境变量时，通过接口变更请求提出 |
+| 端口 | API 使用 3000，Web 开发服务器使用 5173；C 的测试使用 3100 和 5273，伪造的大模型服务使用 3901，伪造的 SMTP 服务使用 3902，避免与开发环境冲突 |
 
-1. 阅读 01、02、03、04 四份文档。
-2. 创建 worktree 和分支，完成 M0 并提交 PR，等待合并。
-3. 准备样例数据：`shopify_customers_sample.csv` 和 `shopify_orders_sample.csv`（至少 200 位客户、600 笔订单，覆盖每个预置分群），以及对应的错误样例。如果负责人提供了脱敏的真实导出数据，优先以其为基础。
-4. 按 M1 中 A 的顺序推进。
+路径归属检查（`scripts/check-ownership.mjs`）：根据分支前缀 `cursor/agent-a-*`、`cursor/agent-b-*`、`cursor/agent-c-*` 检查相对 `main` 的改动文件。只允许改动对应目录，以及上表允许的 `pnpm-lock.yaml` 变化；否则 CI 失败。
 
-### Agent B
+## 6. PR 要求
 
-1. 阅读四份文档，确认 M0 已经合并。
-2. 创建 worktree 和分支，先完成模型与 Mock 供应商，确保测试全程离线也能运行。
-3. 编写提示词模板 `email_v1`；如果负责人提供了 API Key，在人工试跑后把示例输出保存到 `fixtures/llm/`，作为 Mock 的参考。
-4. 按 M1 中 B 的顺序推进。
+每个子 Agent 的 PR 描述包含：
 
-### Agent C
+- **对应任务**：例如“B-M1-2 导入与画像”。
+- **覆盖的验收条目**：例如 D1～D9。
+- **验证方式**：执行了哪些命令，结果如何。
+- **已知限制和 `test.fixme`**（如果有）。
+- **接口变更请求**（如果有）。
+- **对其他 Agent 的影响**（如果有）。
 
-1. 阅读四份文档。
-2. 创建 worktree 和分支，搭建前端骨架；根据 02 第 6 节编写 `api/types.ts` 和 `api/mocks/`。
-3. 按 M1 中 C 的顺序推进；每个页面至少有一个覆盖主要交互的组件测试。
-4. 到 M2 时切换到真实后端进行联调。
+## 7. 子 Agent 启动说明（主 Agent 派发任务时使用）
 
-## 7. 开工前需要负责人确认
+**通用部分（三个子 Agent 都包含）：**
 
-1. 01、02、03 中标为“建议（待确认）”的内容是否可以采用，尤其是：只做邮件渠道、只支持 CSV 导入、Shopify 格式优先、使用 Mock 加兼容 OpenAI 的供应商。
-2. 技术栈是否沿用 FastAPI、PostgreSQL、React 和 Vite。
-3. 是否提供大模型 API Key（作为 Cloud Agent 的 Secret 注入，例如 `LLM_API_KEY`），以及首选的模型。
-4. 是否提供脱敏的真实店铺导出数据作为样例。
-5. 三个 Agent 是同时启动（A 先完成 M0），还是按 A、B、C 的顺序依次启动。
+> 你在 worktree `<路径>`、分支 `<分支名>` 上工作。开始前先完整阅读 `docs/01`～`docs/04`。你只能修改 `<目录>`；接口只能使用 `packages/shared`，需要修改接口时按 04 第 4 节提出请求。所有测试必须能在离线、没有任何 API Key 的环境中通过。不要把 Cursor 作为模型接口。不要在代码、测试或日志中写入任何密钥。按 04 第 2 节中你负责的那一列的顺序拆分 PR，每完成一项就提交、推送并创建或更新草稿 PR。
+
+**Agent A 补充：** 界面全部使用中文；每个页面至少有一个覆盖主要交互的组件测试；所有请求都通过 `src/api/` 中基于 `api.ts` 的客户端发出；在联调前使用 MSW。
+
+**Agent B 补充：** 合规逻辑（退订链接、同意过滤、删除）必须在服务端强制执行；三个适配器（数据来源、大模型、邮件）都要先实现离线版本；发给大模型的请求只能使用人群统计特征；所有响应都使用 shared schema 校验。
+
+**Agent C 补充：** 测试按 03 的条目编号命名，例如 `C4-only-consented.spec.ts`；伪造的大模型服务要记录全部请求内容，用于检查个人信息隔离；`acceptance/run.ts` 输出逐条结果，有失败时以非零退出码结束；M3 时录制演示视频。
+
+## 8. 负责人需要确认的事项
+
+1. 01、02、03 中标为“建议”的内容是否可以采用，尤其是：
+   - 真实邮件发送使用 SMTP；
+   - WhatsApp 使用“短信营销同意”字段作为同意依据；
+   - 转化归因窗口为 7 天；
+   - 沉睡召回以外的场景口径。
+2. 02 第 6 节的接口清单和枚举是否可以作为 M0 中 `packages/shared` 的依据。
+3. 合规条目 C1～C10 是否完整。
+4. 是否在 Cloud Agent 的 Secrets 中提供 `OPENAI_API_KEY`、`DEEPSEEK_API_KEY`（可选：`DOUBAO_API_KEY`）。没有提供时，第一版只能用模板验收，M10 留待之后完成。
+5. 能否提供 1 份脱敏的真实 Shopify 客户和订单导出文件，用于核对字段（P5）。
