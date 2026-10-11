@@ -665,7 +665,7 @@ export async function buildApp() {
       first_name: customer.first_name || greeting,
       last_product: lastProduct || (customer.language === 'es' ? 'tu último pedido' : 'your last order'),
       discount_code: outreach.discount_code || '',
-      unsubscribe_url: `http://localhost:3000/u/${token}`,
+      unsubscribe_url: `${(process.env.PUBLIC_BASE_URL || 'http://localhost:3000').replace(/\/$/, '')}/u/${token}`,
       company_address: storeRow.company_address,
     };
   }
