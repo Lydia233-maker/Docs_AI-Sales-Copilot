@@ -423,6 +423,56 @@ function readFile(file: File) {
   return file.text();
 }
 
+function ClearImports() {
+  const [confirming, setConfirming] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="card">
+      <h3>清除导入的数据</h3>
+      <p>
+        导入只会按邮箱新增或更新，不会删掉这份文件里没有的旧客户。所以上次缺姓名、缺国家的人会一直留在店里，页面上也没有逐个删除。
+      </p>
+      <p className="muted">清除会删掉本店的客户、订单、弃单、聊天事实和已经写好的推广。登录账号和公司地址保留。</p>
+      {confirming ? (
+        <div className="row">
+          <button
+            className="btn danger"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              setError('');
+              try {
+                const saved = await api.clearImports();
+                setMessage(`已清除 ${saved.customers} 位客户、${saved.orders} 笔订单、${saved.checkouts} 张弃单。`);
+                setConfirming(false);
+              } catch (err) {
+                setError(err instanceof Error ? err.message : '清除失败');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            确认清除
+          </button>
+          <button className="btn secondary" disabled={busy} onClick={() => setConfirming(false)}>
+            取消
+          </button>
+        </div>
+      ) : (
+        <p>
+          <button className="btn danger" onClick={() => setConfirming(true)}>
+            清除本店数据
+          </button>
+        </p>
+      )}
+      {message && <p>{message}</p>}
+      {error && <p className="danger">{error}</p>}
+    </div>
+  );
+}
+
 function ImportPage() {
   const [customersFile, setCustomersFile] = useState<File | null>(null);
   const [ordersFile, setOrdersFile] = useState<File | null>(null);
@@ -437,6 +487,7 @@ function ImportPage() {
   return (
     <div>
       <h2>导入</h2>
+      <ClearImports />
       <div className="card">
         <p className="muted">先预览。确认之前不会写入客户和订单。</p>
         <p>

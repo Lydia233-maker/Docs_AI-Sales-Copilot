@@ -29,6 +29,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ customersCsv, ordersCsv }),
     }),
+  clearImports: () =>
+    request<{ customers: number; orders: number; checkouts: number }>('/api/v1/imports/clear', { method: 'POST' }),
   confirmImport: (customersCsv: string, ordersCsv: string) =>
     request<{ customers: number; spanish: number; orders: number; skippedCustomers: number }>('/api/v1/imports/customers-orders', {
       method: 'POST',

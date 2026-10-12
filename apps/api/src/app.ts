@@ -24,7 +24,7 @@ import { applyGorgias, previewGorgias } from './chat/gorgias.ts';
 import { appToday, db, nowIso, uuid } from './db.ts';
 import { daysBetween } from './csv.ts';
 import { beginGeneration, continueGeneration, interruptWritingJobs, regenerateDraft } from './generation/run.ts';
-import { applyAbandoned, applyCustomerOrders, previewAbandoned, previewCustomerOrders } from './imports/index.ts';
+import { applyAbandoned, applyCustomerOrders, clearStoreData, previewAbandoned, previewCustomerOrders } from './imports/index.ts';
 import { exclusionReason, hasMailingIdentity, isEmailEligible } from './eligibility.ts';
 import { checkDraft, detectPrivacy, redactNote, renderCopy } from './templates.ts';
 
@@ -311,6 +311,11 @@ export async function buildApp() {
       return reply.code(400).send(errorBody(ErrorCodes.VALIDATION_FAILED, parsed.error.issues[0]?.message || '请上传客户和订单 CSV'));
     }
     return applyCustomerOrders(auth.storeId, parsed.data.customersCsv, parsed.data.ordersCsv);
+  });
+
+  app.post('/api/v1/imports/clear', async (req) => {
+    const auth = (req as typeof req & { auth: Authed }).auth;
+    return clearStoreData(auth.storeId);
   });
 
   app.post('/api/v1/imports/abandoned/preview', async (req, reply) => {

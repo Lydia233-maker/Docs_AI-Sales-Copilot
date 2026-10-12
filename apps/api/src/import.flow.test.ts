@@ -48,6 +48,8 @@ test('preview does not write, confirm imports, and keeps an overridden language'
     payload: { customersCsv, ordersCsv },
   });
   assert.equal(denied.statusCode, 401);
+  const deniedClear = await app.inject({ method: 'POST', url: '/api/v1/imports/clear' });
+  assert.equal(deniedClear.statusCode, 401);
 
   const login = await app.inject({
     method: 'POST',
@@ -160,6 +162,59 @@ test('preview does not write, confirm imports, and keeps an overridden language'
   });
   assert.equal(
     winback.json().items.some((item: { email: string }) => item.email === 'noname@example.com'),
+    false,
+  );
+
+  const cleared = await app.inject({ method: 'POST', url: '/api/v1/imports/clear', headers });
+  assert.equal(cleared.statusCode, 200);
+  assert.ok(cleared.json().customers >= 40);
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM customers').get() as { n: number }).n, 0);
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM orders').get() as { n: number }).n, 0);
+  const still = await app.inject({ method: 'GET', url: '/api/v1/auth/me', headers });
+  assert.equal(still.statusCode, 200);
+  assert.equal(still.json().store.company_address, '123 Demo St, Austin, TX 78701');
+  const empty = await app.inject({ method: 'GET', url: '/api/v1/overview', headers });
+  assert.equal(empty.json().total, 0);
+  assert.equal(empty.json().incomplete, 0);
+
+  const batchDir = join(dirname(fileURLToPath(import.meta.url)), '../../../fixtures/abandoned-300');
+  const batchCustomers = readFileSync(join(batchDir, 'customers.csv'), 'utf8');
+  const batchOrders = readFileSync(join(batchDir, 'orders.csv'), 'utf8');
+  const batchAbandoned = readFileSync(join(batchDir, 'abandoned.csv'), 'utf8');
+  const batchPreview = await app.inject({
+    method: 'POST',
+    url: '/api/v1/imports/preview',
+    headers,
+    payload: { customersCsv: batchCustomers, ordersCsv: batchOrders },
+  });
+  assert.equal(batchPreview.json().customers, 300);
+  assert.equal(batchPreview.json().skippedCustomers, 0);
+  const batchSaved = await app.inject({
+    method: 'POST',
+    url: '/api/v1/imports/customers-orders',
+    headers,
+    payload: { customersCsv: batchCustomers, ordersCsv: batchOrders },
+  });
+  assert.equal(batchSaved.statusCode, 200);
+  assert.equal(batchSaved.json().customers, 300);
+  const abandonedSaved = await app.inject({
+    method: 'POST',
+    url: '/api/v1/imports/abandoned',
+    headers,
+    payload: { abandonedCsv: batchAbandoned },
+  });
+  assert.equal(abandonedSaved.statusCode, 200, JSON.stringify(abandonedSaved.json()));
+  assert.equal(abandonedSaved.json().matched, 300);
+  assert.equal(abandonedSaved.json().unmatched, 0);
+  const abandonedAudience = await app.inject({
+    method: 'POST',
+    url: '/api/v1/audience/preview',
+    headers,
+    payload: { scenario: 'abandoned_checkout' },
+  });
+  assert.equal(abandonedAudience.json().total, 86);
+  assert.equal(
+    abandonedAudience.json().items.some((item: { firstName: string }) => !String(item.firstName || '').trim()),
     false,
   );
 

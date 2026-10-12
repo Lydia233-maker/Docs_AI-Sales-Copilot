@@ -49,6 +49,7 @@ th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #eee; font
   cursor: pointer;
 }
 .btn.secondary { background: #44564e; }
+.btn.danger { background: #b42318; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .danger { color: #b42318; }
 .warn { color: #b54708; background: #fff7ed; padding: 8px 10px; border-radius: 8px; }

@@ -25,6 +25,10 @@ export function parseAbandonedCsv(csv: string): ParsedCheckout[] {
     const id = getField(row, 'id');
     const email = getField(row, 'email');
     const title = getField(row, 'lineitem name');
+    if (id && current && id === currentId) {
+      current.push(row);
+      continue;
+    }
     if (id && id !== currentId) {
       current = [row];
       currentId = id;
