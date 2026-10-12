@@ -185,6 +185,70 @@ function OverviewPage() {
         </p>
         <p className="muted">中文推广意图不会原样贴进外语正文。有折扣码时，优惠句写 20% off。</p>
       </div>
+      <FieldGuide />
+    </div>
+  );
+}
+
+function FieldGuide() {
+  return (
+    <div className="card">
+      <h3>这些字段怎么算</h3>
+      <p className="muted">金额只加已付款订单。弃单里的商品和金额不计入消费，也不算购买次数。</p>
+      <table>
+        <tbody>
+          <tr>
+            <th>消费金额</th>
+            <td>已付款订单金额加总。没有已付款订单就是 0 美元。</td>
+          </tr>
+          <tr>
+            <th>消费层级</th>
+            <td>按消费金额分三档。不少于 120 美元是高，不少于 50 美元且少于 120 美元是中，少于 50 美元是低。正好 120 美元算高，正好 50 美元算中。</td>
+          </tr>
+          <tr>
+            <th>主要品类</th>
+            <td>
+              已付款商品里出现最多的一类。标题含 litter 或 arena 算猫砂；含 dog 算狗粮；还没归到这两类、且含 chew、toy 或 catnip 的算零食玩具；其余算猫粮。没有已付款商品就是「还没有」。
+            </td>
+          </tr>
+          <tr>
+            <th>购买次数</th>
+            <td>已付款订单的笔数。同一张订单的多行商品算一笔。</td>
+          </tr>
+          <tr>
+            <th>距上次购买</th>
+            <td>最近一笔已付款订单到店铺「今天」的天数。现在店铺里的今天是 2026-11-01。没有已付款订单就不计算。</td>
+          </tr>
+          <tr>
+            <th>语言</th>
+            <td>标签里有 lang:es 用西班牙语，有 lang:en 用英语。没有这类标签时，国家是 MX、ES、AR、CO、CL、PE 用西班牙语，其余用英语。销售在档案里改过的语言会记住，再次导入不覆盖。</td>
+          </tr>
+          <tr>
+            <th>国家</th>
+            <td>客户表的国家代码，认 Default Address Country Code 或 Country。名和姓都空，或国家为空的人不能发信。</td>
+          </tr>
+          <tr>
+            <th>营销同意</th>
+            <td>客户表 Accepts Email Marketing 是 yes、true 或 1，才算同意。未同意的人留在名单里，不生成、不发送。</td>
+          </tr>
+          <tr>
+            <th>沉睡未复购</th>
+            <td>最后一次已付款距今不少于 60 天。</td>
+          </tr>
+          <tr>
+            <th>到了复购窗口</th>
+            <td>最近一次该品类购买距今落在周期上下 7 天。猫砂 21 天，猫粮和狗粮 30 天，零食玩具 14 天。</td>
+          </tr>
+          <tr>
+            <th>首单还没转二单</th>
+            <td>正好 1 笔已付款，且距今 7 到 30 天。</td>
+          </tr>
+          <tr>
+            <th>弃购还没挽回</th>
+            <td>弃单发生在最近 1 到 7 天，并且弃单那天之后没有已付款订单。还没上传弃单时，这里显示「还没有弃单」。</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -303,7 +367,7 @@ function CustomerPage() {
             </tr>
             <tr>
               <th>消费层级</th>
-              <td>{data.spendTier === 'high' ? '高' : data.spendTier === 'mid' ? '中' : '低'}</td>
+              <td>{spendTierText(data.spendTier)}</td>
             </tr>
             <tr>
               <th>主要品类</th>
@@ -792,9 +856,9 @@ function AudiencePage() {
           </select>
           <select value={spendTier} onChange={(e) => setSpendTier(e.target.value)}>
             <option value="">全部消费层级</option>
-            <option value="high">高</option>
-            <option value="mid">中</option>
-            <option value="low">低</option>
+            <option value="high">高：累计不少于 120 美元</option>
+            <option value="mid">中：累计不少于 50 美元、少于 120 美元</option>
+            <option value="low">低：累计少于 50 美元</option>
           </select>
         </div>
         {preview?.missingAbandoned && <p>还没有弃单数据</p>}
@@ -1123,6 +1187,12 @@ function OutreachPage() {
       </div>
     </div>
   );
+}
+
+function spendTierText(tier: string) {
+  if (tier === 'high') return '高，已付款累计不少于 120 美元';
+  if (tier === 'mid') return '中，已付款累计不少于 50 美元、少于 120 美元';
+  return '低，已付款累计少于 50 美元';
 }
 
 function categoryLabel(category: string | null) {
