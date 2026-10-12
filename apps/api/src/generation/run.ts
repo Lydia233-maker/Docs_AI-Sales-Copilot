@@ -93,6 +93,8 @@ function queuedRecipients(outreachId: string) {
       `SELECT r.* FROM outreach_recipients r
        JOIN customers c ON c.id = r.customer_id
        WHERE r.outreach_id=? AND r.eligible=1
+         AND length(trim(COALESCE(c.first_name, '') || COALESCE(c.last_name, ''))) > 0
+         AND length(trim(COALESCE(c.country, ''))) > 0
          AND NOT EXISTS (SELECT 1 FROM drafts d WHERE d.recipient_id=r.id)
        ORDER BY c.last_name, c.first_name, c.email`,
     )
@@ -105,6 +107,8 @@ function nextUnfinished(outreachId: string) {
       `SELECT r.customer_id FROM outreach_recipients r
        JOIN customers c ON c.id = r.customer_id
        WHERE r.outreach_id=? AND r.eligible=1
+         AND length(trim(COALESCE(c.first_name, '') || COALESCE(c.last_name, ''))) > 0
+         AND length(trim(COALESCE(c.country, ''))) > 0
          AND NOT EXISTS (SELECT 1 FROM drafts d WHERE d.recipient_id=r.id AND d.generation_ok=1)
        ORDER BY c.last_name, c.first_name, c.email
        LIMIT 1`,

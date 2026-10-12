@@ -19,13 +19,13 @@ import {
   FactDecisionBody,
   errorBody,
 } from '@copilot/shared';
-import { customersByIds, isPersonalized, selectAudience, summarizeAudience } from './audience.ts';
+import { customersByIds, isPersonalized, selectAudience, storeOverview, summarizeAudience } from './audience.ts';
 import { applyGorgias, previewGorgias } from './chat/gorgias.ts';
 import { appToday, db, nowIso, uuid } from './db.ts';
 import { daysBetween } from './csv.ts';
 import { beginGeneration, continueGeneration, interruptWritingJobs, regenerateDraft } from './generation/run.ts';
 import { applyAbandoned, applyCustomerOrders, previewAbandoned, previewCustomerOrders } from './imports/index.ts';
-import { exclusionReason, isEmailEligible } from './eligibility.ts';
+import { exclusionReason, hasMailingIdentity, isEmailEligible } from './eligibility.ts';
 import { checkDraft, detectPrivacy, redactNote, renderCopy } from './templates.ts';
 
 type Authed = { userId: string; storeId: string };
@@ -216,6 +216,11 @@ export async function buildApp() {
     }
     db.prepare('UPDATE stores SET company_address=? WHERE id=?').run(parsed.data.companyAddress, auth.storeId);
     return { companyAddress: parsed.data.companyAddress };
+  });
+
+  app.get('/api/v1/overview', async (req) => {
+    const auth = (req as typeof req & { auth: Authed }).auth;
+    return storeOverview(auth.storeId);
   });
 
   app.get('/api/v1/customers', async (req) => {
@@ -435,14 +440,14 @@ export async function buildApp() {
       'INSERT INTO outreach_recipients (id, outreach_id, customer_id, language, eligible, exclusion_reason, mode) VALUES (?, ?, ?, ?, ?, ?, ?)',
     );
     for (const row of rows) {
-      const eligible = isEmailEligible(row);
+      const eligible = isEmailEligible(row) && hasMailingIdentity(row);
       insert.run(
         uuid(),
         id,
         row.id,
         row.language,
         eligible ? 1 : 0,
-        eligible ? null : exclusionReason(row),
+        eligible ? null : hasMailingIdentity(row) ? exclusionReason(row) : 'incomplete_profile',
         generationMode(row),
       );
     }
@@ -712,7 +717,7 @@ export async function buildApp() {
         return reply.code(409).send(errorBody(ErrorCodes.MISSING_UNSUBSCRIBE, '存在缺少退订链接的文案'));
       }
       const customer = db.prepare('SELECT * FROM customers WHERE id=?').get(draft.customerId) as CustomerRow;
-      if (!isEmailEligible(customer)) continue;
+      if (!isEmailEligible(customer) || !hasMailingIdentity(customer)) continue;
       const token = randomBytes(24).toString('hex');
       const values = renderValues(customer, draft.lastProduct, outreach.id, token);
       insert.run(

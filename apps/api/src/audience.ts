@@ -1,7 +1,7 @@
 import { db } from './db.ts';
 import { daysBetween } from './csv.ts';
 import { appToday } from './db.ts';
-import { isEmailEligible } from './eligibility.ts';
+import { hasMailingIdentity, isEmailEligible } from './eligibility.ts';
 import {
   cohortKey,
   inAbandonedWindow,
@@ -78,7 +78,9 @@ export function selectAudience(storeId: string, scenario: string, filters: Audie
   if (scenario === 'abandoned_checkout' && abandoned.n === 0) {
     return { missingAbandoned: true, rows: [] as AudienceCustomer[] };
   }
-  let rows = db.prepare('SELECT * FROM customers WHERE store_id=?').all(storeId) as AudienceCustomer[];
+  let rows = (db.prepare('SELECT * FROM customers WHERE store_id=?').all(storeId) as AudienceCustomer[]).filter((row) =>
+    hasMailingIdentity(row),
+  );
   if (filters.language) rows = rows.filter((row) => row.language === filters.language);
   if (filters.category) rows = rows.filter((row) => row.top_category === filters.category);
   if (filters.spendTier) rows = rows.filter((row) => row.spend_tier === filters.spendTier);
@@ -116,6 +118,39 @@ export function customersByIds(storeId: string, ids: string[]) {
     for (const row of rows) found.set(row.id, row);
   }
   return ids.map((id) => found.get(id)).filter((row): row is AudienceCustomer => Boolean(row));
+}
+
+export function storeOverview(storeId: string) {
+  const all = db.prepare('SELECT * FROM customers WHERE store_id=?').all(storeId) as AudienceCustomer[];
+  const addressable = all.filter((row) => hasMailingIdentity(row));
+  const languages = { en: 0, es: 0 };
+  for (const row of addressable) {
+    if (row.language === 'es') languages.es += 1;
+    else languages.en += 1;
+  }
+  const scenes = (['winback_dormant', 'repurchase', 'first_to_second', 'abandoned_checkout'] as const).map((scenario) => {
+    const selected = selectAudience(storeId, scenario);
+    if (selected.missingAbandoned) {
+      return { scenario, missingAbandoned: true, total: null, reachable: null, personalized: null, cohortGroups: null };
+    }
+    const summary = summarizeAudience(selected.rows, scenario);
+    return {
+      scenario,
+      missingAbandoned: false,
+      total: summary.total,
+      reachable: summary.reachable,
+      personalized: summary.personalized,
+      cohortGroups: summary.cohortGroups,
+    };
+  });
+  return {
+    total: all.length,
+    incomplete: all.length - addressable.length,
+    addressable: addressable.length,
+    noConsent: addressable.filter((row) => !isEmailEligible(row)).length,
+    languages,
+    scenes,
+  };
 }
 
 export function summarizeAudience(rows: AudienceCustomer[], scenario: string) {

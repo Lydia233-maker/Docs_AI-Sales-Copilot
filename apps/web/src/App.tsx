@@ -13,6 +13,7 @@ import {
   type OutreachListItem,
   type Preview,
   type GenerationJob,
+  type Overview,
 } from './api';
 
 function useAuth() {
@@ -39,6 +40,9 @@ function Shell({ children, store }: { children: ReactNode; store: string }) {
     <div className="layout">
       <aside className="nav">
         <h1>AI 定向营销助手<br />{store}</h1>
+        <Link className={loc.pathname === '/' ? 'active' : ''} to="/">
+          总览
+        </Link>
         <Link className={loc.pathname.startsWith('/customers') ? 'active' : ''} to="/customers">
           客户
         </Link>
@@ -90,7 +94,7 @@ function LoginPage() {
             onClick={async () => {
               try {
                 await api.login(email, password);
-                nav('/customers');
+                nav('/');
               } catch (err) {
                 setError(err instanceof Error ? err.message : '登录失败');
               }
@@ -99,6 +103,87 @@ function LoginPage() {
             登录
           </button>
         </p>
+      </div>
+    </div>
+  );
+}
+
+const SCENE_LABELS: Record<string, string> = {
+  winback_dormant: '沉睡未复购',
+  repurchase: '到了复购窗口',
+  first_to_second: '首单还没转二单',
+  abandoned_checkout: '弃购还没挽回',
+};
+
+function OverviewPage() {
+  const [data, setData] = useState<Overview | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    api.overview().then(setData).catch((err) => setError(err instanceof Error ? err.message : '总览加载失败'));
+  }, []);
+  if (error) return <p className="danger">{error}</p>;
+  if (!data) return <p>加载中…</p>;
+  const sceneMax = Math.max(...data.scenes.map((scene) => scene.total ?? 0), 1);
+  return (
+    <div>
+      <h2>客户总览</h2>
+      <div className="stat-grid">
+        <div className="card">
+          <span className="muted">客户总数</span>
+          <strong>{data.total}</strong>
+        </div>
+        <div className="card">
+          <span className="muted">资料齐全</span>
+          <strong>{data.addressable}</strong>
+        </div>
+        <div className="card">
+          <span className="muted">未同意营销</span>
+          <strong>{data.noConsent}</strong>
+        </div>
+        <div className="card">
+          <span className="muted">缺姓名或国家</span>
+          <strong>{data.incomplete}</strong>
+        </div>
+      </div>
+      <div className="card">
+        <h3>按购买情况</h3>
+        <p className="muted">
+          条的全长是符合这个分类的人数，深色是其中可以发信的人。缺姓名或国家的人不进入这些分类，也不会生成邮件。
+        </p>
+        <div className="bars">
+          {data.scenes.map((scene) => {
+            const total = scene.total ?? 0;
+            const reachable = scene.reachable ?? 0;
+            const track = scene.missingAbandoned ? 0 : Math.max(Math.round((total / sceneMax) * 100), total > 0 ? 4 : 0);
+            const reach = total > 0 ? Math.round((reachable / total) * 100) : 0;
+            return (
+              <div className="bar-row" key={scene.scenario}>
+                <span>{SCENE_LABELS[scene.scenario] || scene.scenario}</span>
+                <div className="bar-track" aria-hidden="true">
+                  <div className="bar-fill soft" style={{ width: `${track}%` }}>
+                    <div className="bar-fill" style={{ width: `${reach}%` }} />
+                  </div>
+                </div>
+                <span className="bar-count">
+                  {scene.missingAbandoned ? '还没有弃单' : `${total} 人，可发 ${reachable}`}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        <p className="muted">
+          资料齐全的人里，英语 {data.languages.en}，西班牙语 {data.languages.es}。未同意营销的 {data.noConsent} 人会留在名单里，但不生成邮件。
+        </p>
+      </div>
+      <div className="card">
+        <h3>什么叫个性推广</h3>
+        <p>
+          买过至少 2 次，或者已经确认过事实的人，单独写一封。这封信要能看出这个人的商品、距今天数、品类，以及已确认的事实。
+        </p>
+        <p>
+          只买过 1 次、又没有已确认事实的人，按语言、国家、场景、消费层级和主要品类分组，共用一封底稿。复制或发送时，才填上这个人自己的姓名和上次商品。
+        </p>
+        <p className="muted">中文推广意图不会原样贴进外语正文。有折扣码时，优惠句写 20% off。</p>
       </div>
     </div>
   );
@@ -141,10 +226,10 @@ function CustomersPage() {
               <tr key={c.id}>
                 <td>
                   <Link to={`/customers/${c.id}`}>
-                    {c.firstName} {c.lastName}
+                    {`${c.firstName || ''} ${c.lastName || ''}`.trim() || '未填姓名'}
                   </Link>
                 </td>
-                <td>{c.country}</td>
+                <td>{c.country || '未填国家'}</td>
                 <td>{c.language === 'es' ? '西班牙语' : '英语'}</td>
                 <td>{c.orderCount}</td>
                 <td>{c.daysSinceLastOrder ?? '-'}</td>
@@ -354,6 +439,12 @@ function ImportPage() {
       <h2>导入</h2>
       <div className="card">
         <p className="muted">先预览。确认之前不会写入客户和订单。</p>
+        <p>
+          客户 CSV 和订单 CSV 要一起上传。两份文件用邮箱自动对应，不看列的左右位置，但列名要能认出。客户表提供是谁、哪个国家、是否同意收信、备注。订单表提供买了什么、什么时候买。只上传其中一个不够：没有客户表就不知道姓名和营销同意，没有订单表就分不出沉睡、复购和上次商品。
+        </p>
+        <p className="muted">
+          没有邮箱、没有姓名（名和姓都空），或没有国家的行会跳过。这些行不写入，也不能发信。国家列认 Default Address Country Code 或 Country。
+        </p>
         <label>客户 CSV</label>
         <input
           type="file"
@@ -409,9 +500,9 @@ function ImportPage() {
         {preview && (
           <div>
             <p>
-              文件里有客户 {preview.customers} 人，其中西班牙语 {preview.spanish} 人，备注 {preview.notes} 条。订单{' '}
-              {preview.orders} 笔
-              {preview.unmatchedOrders > 0 ? `，其中 ${preview.unmatchedOrders} 笔对不上这次的客户表` : ''}。
+              可导入客户 {preview.customers} 人，跳过 {preview.skippedCustomers} 行（没有邮箱、姓名或国家）。其中西班牙语{' '}
+              {preview.spanish} 人，备注 {preview.notes} 条。订单 {preview.orders} 笔
+              {preview.unmatchedOrders > 0 ? `，其中 ${preview.unmatchedOrders} 笔对不上这次能导入的客户` : ''}。
             </p>
             <p className="muted">当前客户列表仍是 {beforeCount ?? preview.storeCustomers} 人，还没有写入。</p>
             <p>
@@ -423,7 +514,9 @@ function ImportPage() {
                   setError('');
                   try {
                     const saved = await api.confirmImport(customersCsv, ordersCsv);
-                    setMessage(`已导入。客户 ${saved.customers} 人，西班牙语 ${saved.spanish} 人，订单 ${saved.orders} 笔。`);
+                    setMessage(
+                      `已导入。店里现在 ${saved.customers} 人，西班牙语 ${saved.spanish} 人，订单 ${saved.orders} 笔。这次跳过 ${saved.skippedCustomers} 行。`,
+                    );
                     setPreview(null);
                   } catch (err) {
                     setError(err instanceof Error ? err.message : '导入失败');
@@ -664,6 +757,9 @@ function AudiencePage() {
               : '费用还没配置。'}
           </p>
         )}
+        <p className="muted">
+          个性推广指：买过至少 2 次，或已有确认事实的人单独写，信里写出商品、天数、品类和已确认事实。其余人共用一封底稿，复制时才填上各人的姓名和上次商品。没有姓名或国家的客户不会出现在这个名单里。
+        </p>
         {preview && !preview.missingAbandoned && (
           <div style={{ maxHeight: 280, overflow: 'auto' }}>
             {preview.items.map((item) => (
@@ -870,6 +966,11 @@ function OutreachPage() {
             <h3>
               {current.firstName} {current.lastName}
             </h3>
+            <p className="muted">
+              {current.mode === 'personalized'
+                ? '这封是单独写的。正文里应能看出这个人的商品、天数或已确认事实。'
+                : '这封和同一群人共用底稿。上面仍是占位符，复制后才会变成这个人的姓名和上次商品。'}
+            </p>
             {current.personalizationPoints.map((p) => (
               <span key={p} className="tag">
                 {p}
@@ -1026,6 +1127,14 @@ export function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route
+        path="/"
+        element={
+          <Guard>
+            <OverviewPage />
+          </Guard>
+        }
+      />
+      <Route
         path="/customers"
         element={
           <Guard>
@@ -1081,7 +1190,6 @@ export function App() {
           </Guard>
         }
       />
-      <Route path="/" element={<Navigate to="/customers" replace />} />
     </Routes>
   );
 }

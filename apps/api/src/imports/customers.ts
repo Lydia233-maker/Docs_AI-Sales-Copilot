@@ -8,6 +8,7 @@ import {
   parseCsv,
 } from '../csv.ts';
 import { syncCustomerFacts } from '../facts/sync.ts';
+import { hasMailingIdentity } from '../eligibility.ts';
 import { redactNote } from '../templates.ts';
 
 export type CustomerOrderPreview = {
@@ -65,18 +66,20 @@ export function parseCustomerOrderFiles(customersCsv: string, ordersCsv: string)
   let skippedCustomers = 0;
   for (const row of customerRows) {
     const email = getField(row, 'email').toLowerCase();
-    if (!email) {
+    const firstName = getField(row, 'first name');
+    const lastName = getField(row, 'last name');
+    const country = getField(row, 'default address country code', 'country');
+    if (!email || !hasMailingIdentity({ firstName, lastName, country })) {
       skippedCustomers += 1;
       continue;
     }
     const tags = getField(row, 'tags');
-    const country = getField(row, 'default address country code', 'country');
     const noteRaw = getField(row, 'note');
     customers.push({
       externalId: getField(row, 'customer id') || email,
       email,
-      firstName: getField(row, 'first name'),
-      lastName: getField(row, 'last name'),
+      firstName,
+      lastName,
       country,
       language: inferLanguage(tags, country),
       tags,
@@ -272,7 +275,7 @@ export function applyCustomerOrders(storeId: string, customersCsv: string, order
       n: number;
     };
     const total = db.prepare('SELECT COUNT(*) AS n FROM customers WHERE store_id=?').get(storeId) as { n: number };
-    return { customers: total.n, spanish: spanish.n, orders: parsed.orders.length };
+    return { customers: total.n, spanish: spanish.n, orders: parsed.orders.length, skippedCustomers: parsed.skippedCustomers };
   });
   return run();
 }

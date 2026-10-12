@@ -121,5 +121,47 @@ test('preview does not write, confirm imports, and keeps an overridden language'
   const noteCount = db.prepare('SELECT COUNT(*) AS n FROM customer_notes WHERE customer_id=?').get(anna.id) as { n: number };
   assert.equal(noteCount.n, 1);
 
+  const badCustomers = [
+    'Email,First Name,Last Name,Default Address Country Code,Accepts Email Marketing',
+    'noname@example.com,,,US,yes',
+    'nocountry@example.com,No,Country,,yes',
+    'ada.stone@example.com,Ada,Stone,US,yes',
+  ].join('\n');
+  const badOrders = [
+    'Name,Email,Financial Status,Created at,Total,Lineitem name',
+    '#1,noname@example.com,paid,2026-08-01,20.00,Salmon Cat Food',
+    '#2,ada.stone@example.com,paid,2026-08-01,20.00,Salmon Cat Food',
+  ].join('\n');
+  const badPreview = await app.inject({
+    method: 'POST',
+    url: '/api/v1/imports/preview',
+    headers,
+    payload: { customersCsv: badCustomers, ordersCsv: badOrders },
+  });
+  assert.equal(badPreview.json().customers, 1);
+  assert.equal(badPreview.json().skippedCustomers, 2);
+  const badSaved = await app.inject({
+    method: 'POST',
+    url: '/api/v1/imports/customers-orders',
+    headers,
+    payload: { customersCsv: badCustomers, ordersCsv: badOrders },
+  });
+  assert.equal(badSaved.statusCode, 200);
+  const unnamed = db.prepare("SELECT COUNT(*) AS n FROM customers WHERE email='noname@example.com'").get() as { n: number };
+  assert.equal(unnamed.n, 0);
+  const overview = await app.inject({ method: 'GET', url: '/api/v1/overview', headers });
+  assert.equal(overview.statusCode, 200);
+  assert.equal(overview.json().incomplete, 0);
+  const winback = await app.inject({
+    method: 'POST',
+    url: '/api/v1/audience/preview',
+    headers,
+    payload: { scenario: 'winback_dormant' },
+  });
+  assert.equal(
+    winback.json().items.some((item: { email: string }) => item.email === 'noname@example.com'),
+    false,
+  );
+
   await app.close();
 });

@@ -22,6 +22,7 @@ export const api = {
     request('/api/v1/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
   logout: () => request('/api/v1/auth/logout', { method: 'POST' }),
   me: () => request<{ store: { name: string; company_address: string } }>('/api/v1/auth/me'),
+  overview: () => request<Overview>('/api/v1/overview'),
   customers: (query = '') => request<{ items: Customer[]; total: number }>(`/api/v1/customers${query}`),
   previewImport: (customersCsv: string, ordersCsv: string) =>
     request<ImportPreview>('/api/v1/imports/preview', {
@@ -29,7 +30,7 @@ export const api = {
       body: JSON.stringify({ customersCsv, ordersCsv }),
     }),
   confirmImport: (customersCsv: string, ordersCsv: string) =>
-    request<{ customers: number; spanish: number; orders: number }>('/api/v1/imports/customers-orders', {
+    request<{ customers: number; spanish: number; orders: number; skippedCustomers: number }>('/api/v1/imports/customers-orders', {
       method: 'POST',
       body: JSON.stringify({ customersCsv, ordersCsv }),
     }),
@@ -95,6 +96,24 @@ export const api = {
     }),
   renderDraft: (id: string) => request<{ subject: string; body: string }>(`/api/v1/drafts/${id}/rendered`),
   send: (id: string) => request<{ sent: number; sender: string }>(`/api/v1/outreach/${id}/send`, { method: 'POST' }),
+};
+
+export type OverviewScene = {
+  scenario: string;
+  missingAbandoned: boolean;
+  total: number | null;
+  reachable: number | null;
+  personalized: number | null;
+  cohortGroups: number | null;
+};
+
+export type Overview = {
+  total: number;
+  incomplete: number;
+  addressable: number;
+  noConsent: number;
+  languages: { en: number; es: number };
+  scenes: OverviewScene[];
 };
 
 export type ImportPreview = {
