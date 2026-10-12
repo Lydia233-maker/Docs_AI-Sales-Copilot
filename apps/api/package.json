@@ -6,7 +6,7 @@
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
     "seed": "tsx src/seed.ts",
-    "test": "tsx --test src/eligibility.test.ts src/templates.test.ts src/csv.test.ts",
+    "test": "tsx --test src/eligibility.test.ts src/templates.test.ts src/csv.test.ts src/db.constraints.test.ts src/audience-rules.test.ts src/facts/phrases.test.ts && tsx --test src/outreach.flow.test.ts && tsx --test src/import.flow.test.ts && tsx --test src/store.flow.test.ts && tsx --test src/profile.flow.test.ts && tsx --test src/scale.flow.test.ts",
     "build": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

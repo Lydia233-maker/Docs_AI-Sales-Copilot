@@ -8,15 +8,25 @@ import {
   CreateOutreachBody,
   ErrorCodes,
   LoginBody,
+  ImportAbandonedBody,
+  ImportCustomerOrdersBody,
+  ImportGorgiasBody,
   PreviewAudienceBody,
   ReviewDraftBody,
+  UpdateCompanyAddressBody,
   UpdateDraftBody,
+  UpdateLanguageBody,
+  FactDecisionBody,
   errorBody,
 } from '@copilot/shared';
+import { customersByIds, isPersonalized, selectAudience, storeOverview, summarizeAudience } from './audience.ts';
+import { applyGorgias, previewGorgias } from './chat/gorgias.ts';
 import { appToday, db, nowIso, uuid } from './db.ts';
 import { daysBetween } from './csv.ts';
-import { exclusionReason, isEmailEligible } from './eligibility.ts';
-import { checkDraft, detectPrivacy, generateTemplate, redactNote, renderCopy } from './templates.ts';
+import { beginGeneration, continueGeneration, interruptWritingJobs, regenerateDraft } from './generation/run.ts';
+import { applyAbandoned, applyCustomerOrders, clearStoreData, previewAbandoned, previewCustomerOrders } from './imports/index.ts';
+import { exclusionReason, hasMailingIdentity, isEmailEligible } from './eligibility.ts';
+import { checkDraft, detectPrivacy, redactNote, renderCopy } from './templates.ts';
 
 type Authed = { userId: string; storeId: string };
 
@@ -41,26 +51,6 @@ function notesOf(customerId: string) {
   return db
     .prepare('SELECT id, text, created_at FROM customer_notes WHERE customer_id=? ORDER BY created_at DESC')
     .all(customerId) as { id: string; text: string; created_at: string }[];
-}
-
-function audienceFilter(storeId: string, scenario: string, language?: string, hasNotes?: boolean) {
-  let sql = 'SELECT c.* FROM customers c WHERE c.store_id = ?';
-  const params: unknown[] = [storeId];
-  if (scenario === 'winback_dormant') {
-    sql += " AND c.last_order_at IS NOT NULL AND c.last_order_at <= date(?, '-60 days')";
-    params.push(appToday());
-  }
-  if (language) {
-    sql += ' AND c.language = ?';
-    params.push(language);
-  }
-  if (hasNotes === true) {
-    sql += ' AND EXISTS (SELECT 1 FROM customer_notes n WHERE n.customer_id=c.id)';
-  }
-  if (hasNotes === false) {
-    sql += ' AND NOT EXISTS (SELECT 1 FROM customer_notes n WHERE n.customer_id=c.id)';
-  }
-  return db.prepare(sql).all(...params) as CustomerRow[];
 }
 
 type CustomerRow = {
@@ -101,10 +91,36 @@ function serializeCustomer(row: CustomerRow) {
   };
 }
 
-function generationMode(row: CustomerRow) {
-  const notes = notesOf(row.id);
-  const tags = JSON.parse(row.preference_tags || '[]') as string[];
-  return row.order_count >= 2 || notes.length > 0 || tags.length > 0 ? 'personalized' : 'cohort';
+function generationMode(row: { id: string; order_count: number }) {
+  return isPersonalized(row) ? 'personalized' : 'cohort';
+}
+
+function jobView(outreachId: string) {
+  const job = db.prepare('SELECT * FROM generation_jobs WHERE outreach_id=?').get(outreachId) as
+    | {
+        status: string;
+        planned_count: number;
+        completed_count: number;
+        failed_count: number;
+        next_customer_id: string | null;
+        writer: string | null;
+      }
+    | undefined;
+  if (!job) return null;
+  const next = job.next_customer_id
+    ? (db.prepare('SELECT first_name, last_name FROM customers WHERE id=?').get(job.next_customer_id) as
+        | { first_name: string | null; last_name: string | null }
+        | undefined)
+    : undefined;
+  return {
+    status: job.status,
+    plannedCount: job.planned_count,
+    completedCount: job.completed_count,
+    failedCount: job.failed_count,
+    nextCustomerId: job.next_customer_id,
+    nextCustomerName: next ? `${next.first_name || ''} ${next.last_name || ''}`.trim() : null,
+    writer: job.writer,
+  };
 }
 
 function issuesFor(body: string) {
@@ -112,6 +128,7 @@ function issuesFor(body: string) {
 }
 
 export async function buildApp() {
+  interruptWritingJobs();
   const app = Fastify({ logger: false });
   await app.register(cors, { origin: true, credentials: true });
   await app.register(cookie);
@@ -183,7 +200,27 @@ export async function buildApp() {
 
   app.get('/api/v1/store', async (req) => {
     const auth = (req as typeof req & { auth: Authed }).auth;
-    return db.prepare('SELECT id, name, company_address, brand_voice FROM stores WHERE id=?').get(auth.storeId);
+    const store = db.prepare('SELECT id, name, company_address FROM stores WHERE id=?').get(auth.storeId) as {
+      id: string;
+      name: string;
+      company_address: string;
+    };
+    return { id: store.id, name: store.name, companyAddress: store.company_address };
+  });
+
+  app.patch('/api/v1/store', async (req, reply) => {
+    const auth = (req as typeof req & { auth: Authed }).auth;
+    const parsed = UpdateCompanyAddressBody.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(errorBody(ErrorCodes.VALIDATION_FAILED, parsed.error.issues[0]?.message || '请填写公司地址'));
+    }
+    db.prepare('UPDATE stores SET company_address=? WHERE id=?').run(parsed.data.companyAddress, auth.storeId);
+    return { companyAddress: parsed.data.companyAddress };
+  });
+
+  app.get('/api/v1/overview', async (req) => {
+    const auth = (req as typeof req & { auth: Authed }).auth;
+    return storeOverview(auth.storeId);
   });
 
   app.get('/api/v1/customers', async (req) => {
@@ -228,7 +265,99 @@ export async function buildApp() {
         category: purchase.category,
         createdAtShop: purchase.created_at_shop,
       })),
+      facts: (
+        db
+          .prepare('SELECT id, kind, status, source, quote FROM facts WHERE customer_id=? ORDER BY created_at')
+          .all(id) as { id: string; kind: string; status: string; source: string; quote: string }[]
+      ).map((fact) => ({
+        id: fact.id,
+        kind: fact.kind,
+        status: fact.status,
+        source: fact.source,
+        quote: fact.quote,
+      })),
     };
+  });
+
+  app.post('/api/v1/facts/:id/decision', async (req, reply) => {
+    const auth = (req as typeof req & { auth: Authed }).auth;
+    const parsed = FactDecisionBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send(errorBody(ErrorCodes.VALIDATION_FAILED, '请确认或忽略'));
+    const fact = db
+      .prepare('SELECT id FROM facts WHERE id=? AND store_id=?')
+      .get((req.params as { id: string }).id, auth.storeId) as { id: string } | undefined;
+    if (!fact) return reply.code(404).send(errorBody(ErrorCodes.NOT_FOUND, '事实不存在'));
+    if (parsed.data.decision === 'dismiss') {
+      db.prepare('DELETE FROM facts WHERE id=?').run(fact.id);
+      return { ok: true, status: 'dismissed' };
+    }
+    db.prepare("UPDATE facts SET status='confirmed' WHERE id=?").run(fact.id);
+    return { ok: true, status: 'confirmed' };
+  });
+
+  app.post('/api/v1/imports/preview', async (req, reply) => {
+    const auth = (req as typeof req & { auth: Authed }).auth;
+    const parsed = ImportCustomerOrdersBody.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(errorBody(ErrorCodes.VALIDATION_FAILED, parsed.error.issues[0]?.message || '请上传客户和订单 CSV'));
+    }
+    return previewCustomerOrders(auth.storeId, parsed.data.customersCsv, parsed.data.ordersCsv);
+  });
+
+  app.post('/api/v1/imports/customers-orders', async (req, reply) => {
+    const auth = (req as typeof req & { auth: Authed }).auth;
+    const parsed = ImportCustomerOrdersBody.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(errorBody(ErrorCodes.VALIDATION_FAILED, parsed.error.issues[0]?.message || '请上传客户和订单 CSV'));
+    }
+    return applyCustomerOrders(auth.storeId, parsed.data.customersCsv, parsed.data.ordersCsv);
+  });
+
+  app.post('/api/v1/imports/clear', async (req) => {
+    const auth = (req as typeof req & { auth: Authed }).auth;
+    return clearStoreData(auth.storeId);
+  });
+
+  app.post('/api/v1/imports/abandoned/preview', async (req, reply) => {
+    const auth = (req as typeof req & { auth: Authed }).auth;
+    const parsed = ImportAbandonedBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send(errorBody(ErrorCodes.VALIDATION_FAILED, '请上传弃单 CSV'));
+    return previewAbandoned(auth.storeId, parsed.data.abandonedCsv);
+  });
+
+  app.post('/api/v1/imports/abandoned', async (req, reply) => {
+    const auth = (req as typeof req & { auth: Authed }).auth;
+    const parsed = ImportAbandonedBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send(errorBody(ErrorCodes.VALIDATION_FAILED, '请上传弃单 CSV'));
+    return applyAbandoned(auth.storeId, parsed.data.abandonedCsv);
+  });
+
+  app.post('/api/v1/imports/gorgias/preview', async (req, reply) => {
+    const auth = (req as typeof req & { auth: Authed }).auth;
+    const parsed = ImportGorgiasBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send(errorBody(ErrorCodes.VALIDATION_FAILED, '请上传 Gorgias CSV'));
+    return previewGorgias(auth.storeId, parsed.data.csv);
+  });
+
+  app.post('/api/v1/imports/gorgias', async (req, reply) => {
+    const auth = (req as typeof req & { auth: Authed }).auth;
+    const parsed = ImportGorgiasBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send(errorBody(ErrorCodes.VALIDATION_FAILED, '请上传 Gorgias CSV'));
+    return applyGorgias(auth.storeId, parsed.data.csv);
+  });
+
+  app.patch('/api/v1/customers/:id/language', async (req, reply) => {
+    const auth = (req as typeof req & { auth: Authed }).auth;
+    const id = (req.params as { id: string }).id;
+    const parsed = UpdateLanguageBody.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send(errorBody(ErrorCodes.VALIDATION_FAILED, '请选择英语或西班牙语'));
+    }
+    const row = db.prepare('SELECT * FROM customers WHERE id=? AND store_id=?').get(id, auth.storeId) as CustomerRow | undefined;
+    if (!row) return reply.code(404).send(errorBody(ErrorCodes.NOT_FOUND, '客户不存在'));
+    db.prepare('UPDATE customers SET language=?, language_overridden=1 WHERE id=?').run(parsed.data.language, id);
+    const next = db.prepare('SELECT * FROM customers WHERE id=?').get(id) as CustomerRow;
+    return serializeCustomer(next);
   });
 
   app.post('/api/v1/customers/:id/notes', async (req, reply) => {
@@ -270,17 +399,23 @@ export async function buildApp() {
     if (!parsed.success) {
       return reply.code(400).send(errorBody(ErrorCodes.VALIDATION_FAILED, '筛选条件无效'));
     }
-    const rows = audienceFilter(auth.storeId, parsed.data.scenario, parsed.data.language, parsed.data.hasNotes);
-    const eligible = rows.filter((r) => isEmailEligible(r));
-    const languages = { en: 0, es: 0 };
-    for (const row of eligible) languages[row.language as 'en' | 'es'] += 1;
+    const selected = selectAudience(auth.storeId, parsed.data.scenario, parsed.data);
+    if (selected.missingAbandoned) {
+      return { missingAbandoned: true, message: '还没有弃单数据', total: null, reachable: null };
+    }
     return {
-      total: rows.length,
-      reachable: eligible.length,
-      excluded: rows.length - eligible.length,
-      languages,
-      personalized: eligible.filter((r) => generationMode(r) === 'personalized').length,
-      cohort: eligible.filter((r) => generationMode(r) === 'cohort').length,
+      missingAbandoned: false,
+      ...summarizeAudience(selected.rows, parsed.data.scenario),
+      items: selected.rows.map((row) => ({
+        id: row.id,
+        firstName: row.first_name,
+        lastName: row.last_name,
+        email: row.email,
+        language: row.language,
+        eligible: isEmailEligible(row),
+        topCategory: row.top_category,
+        spendTier: row.spend_tier,
+      })),
     };
   });
 
@@ -290,7 +425,9 @@ export async function buildApp() {
     if (!parsed.success) {
       return reply.code(400).send(errorBody(ErrorCodes.VALIDATION_FAILED, parsed.error.issues[0]?.message || '创建失败'));
     }
-    const rows = audienceFilter(auth.storeId, parsed.data.scenario, parsed.data.language, parsed.data.hasNotes);
+    const rows = parsed.data.customerIds
+      ? customersByIds(auth.storeId, parsed.data.customerIds)
+      : selectAudience(auth.storeId, parsed.data.scenario, parsed.data).rows;
     const id = uuid();
     db.prepare(
       'INSERT INTO outreach (id, store_id, name, intent_zh, scenario, discount_code, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
@@ -308,14 +445,14 @@ export async function buildApp() {
       'INSERT INTO outreach_recipients (id, outreach_id, customer_id, language, eligible, exclusion_reason, mode) VALUES (?, ?, ?, ?, ?, ?, ?)',
     );
     for (const row of rows) {
-      const eligible = isEmailEligible(row);
+      const eligible = isEmailEligible(row) && hasMailingIdentity(row);
       insert.run(
         uuid(),
         id,
         row.id,
         row.language,
         eligible ? 1 : 0,
-        eligible ? null : exclusionReason(row),
+        eligible ? null : hasMailingIdentity(row) ? exclusionReason(row) : 'incomplete_profile',
         generationMode(row),
       );
     }
@@ -362,6 +499,7 @@ export async function buildApp() {
           return acc;
         }, {}),
       drafts,
+      job: jobView(id),
     };
   }
 
@@ -385,6 +523,7 @@ export async function buildApp() {
       status: string;
       edited: number;
       last_product: string | null;
+      writer: string | null;
       first_name: string | null;
       last_name: string | null;
       email: string;
@@ -409,6 +548,7 @@ export async function buildApp() {
         status: row.status,
         edited: Boolean(row.edited),
         lastProduct: row.last_product,
+        writer: row.writer,
         issues,
         canApprove: issues.every((i) => i.level !== 'block') && row.status !== 'approved',
       };
@@ -432,6 +572,7 @@ export async function buildApp() {
       intentZh: row.intent_zh,
       status: row.status,
       createdAt: row.created_at,
+      job: jobView(row.id),
     }));
     return { items, total: items.length };
   });
@@ -445,55 +586,26 @@ export async function buildApp() {
 
   app.post('/api/v1/outreach/:id/generate', async (req, reply) => {
     const auth = (req as typeof req & { auth: Authed }).auth;
-    const outreach = getOutreach((req.params as { id: string }).id, auth.storeId);
-    if (!outreach) return reply.code(404).send(errorBody(ErrorCodes.NOT_FOUND, '推广不存在'));
-    const recipients = db
-      .prepare('SELECT * FROM outreach_recipients WHERE outreach_id=? AND eligible=1')
-      .all(outreach.id) as { id: string; customer_id: string; language: string; mode: string }[];
-    if (recipients.length === 0) {
-      return reply.code(409).send(errorBody(ErrorCodes.NO_ELIGIBLE_RECIPIENTS, '没有可发送的客户'));
-    }
-    db.prepare('DELETE FROM drafts WHERE outreach_id=?').run(outreach.id);
-    const insert = db.prepare(
-      `INSERT INTO drafts (id, outreach_id, recipient_id, customer_id, language, mode, subject, body, zh_subject, zh_body, personalization_points, status, last_product)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready', ?)`,
-    );
-    for (const recipient of recipients) {
-      const customer = db.prepare('SELECT * FROM customers WHERE id=?').get(recipient.customer_id) as CustomerRow;
-      const purchases = customerPurchases(customer.id).map((p) => ({
-        title: p.title,
-        category: p.category,
-        daysAgo: daysBetween(p.created_at_shop, appToday()),
-      }));
-      const notes = notesOf(customer.id).slice(0, 5).map((n) => redactNote(n.text));
-      const brief = {
-        language: customer.language as 'en' | 'es',
-        country: customer.country || '',
-        orderCount: customer.order_count,
-        spendTier: customer.spend_tier,
-        daysSinceLastOrder: customer.last_order_at ? daysBetween(customer.last_order_at, appToday()) : null,
-        purchases,
-        preferenceTags: JSON.parse(customer.preference_tags || '[]'),
-        notes,
-      };
-      const copy = generateTemplate(brief, outreach.intentZh, outreach.discountCode || undefined);
-      insert.run(
-        uuid(),
-        outreach.id,
-        recipient.id,
-        customer.id,
-        customer.language,
-        recipient.mode,
-        copy.subject,
-        copy.body,
-        copy.zhSubject,
-        copy.zhBody,
-        JSON.stringify(copy.points),
-        purchases[0]?.title || '',
-      );
-    }
-    db.prepare("UPDATE outreach SET status='reviewing' WHERE id=?").run(outreach.id);
-    return getOutreach(outreach.id, auth.storeId);
+    const id = (req.params as { id: string }).id;
+    const started = beginGeneration(id, auth.storeId);
+    if (!started) return reply.code(404).send(errorBody(ErrorCodes.NOT_FOUND, '推广不存在'));
+    if (started.empty) return reply.code(409).send(errorBody(ErrorCodes.NO_ELIGIBLE_RECIPIENTS, '没有可发送的客户'));
+    return getOutreach(id, auth.storeId);
+  });
+
+  app.post('/api/v1/outreach/:id/continue', async (req, reply) => {
+    const auth = (req as typeof req & { auth: Authed }).auth;
+    const id = (req.params as { id: string }).id;
+    if (!continueGeneration(id, auth.storeId)) return reply.code(404).send(errorBody(ErrorCodes.NOT_FOUND, '推广不存在'));
+    return getOutreach(id, auth.storeId);
+  });
+
+  app.post('/api/v1/drafts/:id/regenerate', async (req, reply) => {
+    const auth = (req as typeof req & { auth: Authed }).auth;
+    const id = await regenerateDraft((req.params as { id: string }).id, auth.storeId);
+    if (!id) return reply.code(404).send(errorBody(ErrorCodes.NOT_FOUND, '草稿不存在'));
+    const outreach = db.prepare('SELECT outreach_id FROM drafts WHERE id=?').get(id) as { outreach_id: string };
+    return listDrafts(outreach.outreach_id).find((draft) => draft.id === id);
   });
 
   app.patch('/api/v1/drafts/:id', async (req, reply) => {
@@ -529,10 +641,7 @@ export async function buildApp() {
     if (parsed.data.decision === 'approve' && issuesFor(draft.body).some((i) => i.level === 'block')) {
       return reply.code(409).send(errorBody(ErrorCodes.DRAFT_HAS_BLOCKING_ISSUES, '存在阻止性问题，不能通过'));
     }
-    db.prepare('UPDATE drafts SET status=? WHERE id=?').run(
-      parsed.data.decision === 'approve' ? 'approved' : 'rejected',
-      draft.id,
-    );
+    db.prepare("UPDATE drafts SET status='approved' WHERE id=?").run(draft.id);
     return listDrafts(draft.outreach_id).find((d) => d.id === draft.id);
   });
 
@@ -566,7 +675,7 @@ export async function buildApp() {
       first_name: customer.first_name || greeting,
       last_product: lastProduct || (customer.language === 'es' ? 'tu último pedido' : 'your last order'),
       discount_code: outreach.discount_code || '',
-      unsubscribe_url: `http://localhost:3000/u/${token}`,
+      unsubscribe_url: `${(process.env.PUBLIC_BASE_URL || 'http://localhost:3000').replace(/\/$/, '')}/u/${token}`,
       company_address: storeRow.company_address,
     };
   }
@@ -613,7 +722,7 @@ export async function buildApp() {
         return reply.code(409).send(errorBody(ErrorCodes.MISSING_UNSUBSCRIBE, '存在缺少退订链接的文案'));
       }
       const customer = db.prepare('SELECT * FROM customers WHERE id=?').get(draft.customerId) as CustomerRow;
-      if (!isEmailEligible(customer)) continue;
+      if (!isEmailEligible(customer) || !hasMailingIdentity(customer)) continue;
       const token = randomBytes(24).toString('hex');
       const values = renderValues(customer, draft.lastProduct, outreach.id, token);
       insert.run(

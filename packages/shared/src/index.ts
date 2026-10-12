@@ -3,8 +3,56 @@ import { z } from 'zod';
 export const LANGUAGES = ['en', 'es'] as const;
 export type Language = (typeof LANGUAGES)[number];
 
-export const SCENARIOS = ['winback_dormant', 'all'] as const;
-export type Scenario = (typeof SCENARIOS)[number];
+export const AUDIENCE_SCENARIOS = [
+  'winback_dormant',
+  'repurchase',
+  'first_to_second',
+  'abandoned_checkout',
+] as const;
+export type AudienceScenario = (typeof AUDIENCE_SCENARIOS)[number];
+export const SCENARIOS = AUDIENCE_SCENARIOS;
+export type Scenario = AudienceScenario;
+
+export const AudienceScenarioSchema = z.enum(AUDIENCE_SCENARIOS);
+
+export const FactDecisionBody = z
+  .object({
+    decision: z.enum(['confirm', 'dismiss']),
+  })
+  .strict();
+
+export const UpdateLanguageBody = z
+  .object({
+    language: z.enum(LANGUAGES),
+  })
+  .strict();
+
+export const UpdateCompanyAddressBody = z
+  .object({
+    companyAddress: z.string().trim().min(1, '请填写公司地址').max(300),
+  })
+  .strict();
+
+const EMAIL_SOURCE = '[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}';
+const PHONE_SOURCE = '\\+?\\d[\\d\\s()-]{7,}\\d';
+
+export function containsEmail(text: string) {
+  return new RegExp(EMAIL_SOURCE, 'i').test(text);
+}
+
+export function containsPhone(text: string) {
+  return new RegExp(PHONE_SOURCE).test(text);
+}
+
+export function containsContactDetail(text: string) {
+  return containsEmail(text) || containsPhone(text);
+}
+
+export function redactContact(text: string) {
+  return text
+    .replace(new RegExp(EMAIL_SOURCE, 'gi'), '[已隐藏]')
+    .replace(new RegExp(PHONE_SOURCE, 'g'), '[已隐藏]');
+}
 
 export const PLACEHOLDERS = [
   'first_name',
@@ -17,6 +65,22 @@ export type Placeholder = (typeof PLACEHOLDERS)[number];
 
 export function isAllowedPlaceholder(name: string): boolean {
   return (PLACEHOLDERS as readonly string[]).includes(name);
+}
+
+export function draftIssues(body: string): { level: 'block'; message: string }[] {
+  const issues: { level: 'block'; message: string }[] = [];
+  if (!body.includes('{{unsubscribe_url}}')) {
+    issues.push({ level: 'block', message: '缺少退订链接 {{unsubscribe_url}}' });
+  }
+  if (!body.includes('{{company_address}}')) {
+    issues.push({ level: 'block', message: '缺少公司地址 {{company_address}}' });
+  }
+  for (const name of extractPlaceholders(body)) {
+    if (!isAllowedPlaceholder(name)) {
+      issues.push({ level: 'block', message: `未知的占位符 ${name}` });
+    }
+  }
+  return issues;
 }
 
 export function extractPlaceholders(text: string): string[] {
@@ -42,7 +106,9 @@ export const CustomerBriefSchema = z
       }),
     ),
     preferenceTags: z.array(z.string()),
-    notes: z.array(z.string()),
+    notes: z.array(
+      z.string().refine((note) => !containsContactDetail(note), '备注里的邮箱或电话要先遮盖'),
+    ),
   })
   .strict();
 
@@ -61,24 +127,57 @@ export const AddPreferenceTagBody = z.object({
   tag: z.string().trim().min(1, '标签不能为空').max(40, '标签最多 40 个字'),
 });
 
-export const PreviewAudienceBody = z.object({
-  scenario: z.enum(SCENARIOS),
-  language: z.enum(LANGUAGES).optional(),
-  hasNotes: z.boolean().optional(),
-});
+export const ImportCustomerOrdersBody = z
+  .object({
+    customersCsv: z.string().min(1, '请上传客户 CSV'),
+    ordersCsv: z.string().min(1, '请上传订单 CSV'),
+  })
+  .strict();
 
-export const CreateOutreachBody = z.object({
-  name: z.string().trim().min(1).max(80).optional(),
-  intentZh: z.string().trim().min(1, '请填写推广意图'),
-  scenario: z.enum(SCENARIOS),
-  language: z.enum(LANGUAGES).optional(),
-  hasNotes: z.boolean().optional(),
-  discountCode: z.string().trim().optional(),
-});
+export const CATEGORIES = ['cat_litter', 'cat_food', 'dog_food', 'treats'] as const;
+export const SPEND_TIERS = ['high', 'mid', 'low'] as const;
 
-export const ReviewDraftBody = z.object({
-  decision: z.enum(['approve', 'reject']),
-});
+export const PreviewAudienceBody = z
+  .object({
+    scenario: z.enum(AUDIENCE_SCENARIOS),
+    language: z.enum(LANGUAGES).optional(),
+    category: z.enum(CATEGORIES).optional(),
+    spendTier: z.enum(SPEND_TIERS).optional(),
+    hasNotes: z.boolean().optional(),
+  })
+  .strict();
+
+export const CreateOutreachBody = z
+  .object({
+    name: z.string().trim().min(1).max(80).optional(),
+    intentZh: z.string().trim().min(1, '请填写推广意图'),
+    scenario: z.enum(AUDIENCE_SCENARIOS),
+    language: z.enum(LANGUAGES).optional(),
+    category: z.enum(CATEGORIES).optional(),
+    spendTier: z.enum(SPEND_TIERS).optional(),
+    hasNotes: z.boolean().optional(),
+    customerIds: z.array(z.string()).optional(),
+    discountCode: z.string().trim().optional(),
+  })
+  .strict();
+
+export const ReviewDraftBody = z
+  .object({
+    decision: z.enum(['approve']),
+  })
+  .strict();
+
+export const ImportAbandonedBody = z
+  .object({
+    abandonedCsv: z.string().min(1, '请上传弃单 CSV'),
+  })
+  .strict();
+
+export const ImportGorgiasBody = z
+  .object({
+    csv: z.string().min(1, '请上传 Gorgias CSV'),
+  })
+  .strict();
 
 export const UpdateDraftBody = z.object({
   subject: z.string().optional(),

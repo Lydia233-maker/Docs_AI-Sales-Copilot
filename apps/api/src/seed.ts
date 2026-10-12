@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { appToday, db, nowIso, uuid } from './db.ts';
+import { applyAbandoned } from './imports/abandoned.ts';
+import { syncStoreFacts } from './facts/sync.ts';
 import {
   categoryOf,
   daysBetween,
@@ -28,6 +30,10 @@ function spendTier(cents: number) {
   return 'low';
 }
 
+db.exec('DELETE FROM generation_jobs');
+db.exec('DELETE FROM facts');
+db.exec('DELETE FROM abandoned_checkout_items');
+db.exec('DELETE FROM abandoned_checkouts');
 db.exec('DELETE FROM messages');
 db.exec('DELETE FROM drafts');
 db.exec('DELETE FROM outreach_recipients');
@@ -152,6 +158,9 @@ for (const note of notes) {
   const row = findCustomer.get(storeId, note.customerExternalId) as { id: string } | undefined;
   if (row) insertNote.run(uuid(), storeId, row.id, note.text, created);
 }
+
+applyAbandoned(storeId, readFileSync(join(fixtureDir, 'abandoned.csv'), 'utf8'));
+syncStoreFacts(storeId);
 
 const summary = db.prepare('SELECT COUNT(*) AS n FROM customers').get() as { n: number };
 const today = appToday();

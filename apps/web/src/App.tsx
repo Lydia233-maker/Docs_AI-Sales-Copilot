@@ -1,13 +1,19 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { draftIssues } from '@copilot/shared';
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   api,
   type Customer,
   type CustomerDetail,
+  type ImportPreview,
+  type AbandonedPreview,
+  type GorgiasPreview,
   type Draft,
   type Outreach,
   type OutreachListItem,
   type Preview,
+  type GenerationJob,
+  type Overview,
 } from './api';
 
 function useAuth() {
@@ -34,8 +40,17 @@ function Shell({ children, store }: { children: ReactNode; store: string }) {
     <div className="layout">
       <aside className="nav">
         <h1>AI 定向营销助手<br />{store}</h1>
+        <Link className={loc.pathname === '/' ? 'active' : ''} to="/">
+          总览
+        </Link>
         <Link className={loc.pathname.startsWith('/customers') ? 'active' : ''} to="/customers">
           客户
+        </Link>
+        <Link className={loc.pathname.startsWith('/import') ? 'active' : ''} to="/import">
+          导入
+        </Link>
+        <Link className={loc.pathname.startsWith('/store') ? 'active' : ''} to="/store">
+          店铺
         </Link>
         <Link className={loc.pathname.startsWith('/audience') ? 'active' : ''} to="/audience">
           挑选客户
@@ -79,7 +94,7 @@ function LoginPage() {
             onClick={async () => {
               try {
                 await api.login(email, password);
-                nav('/customers');
+                nav('/');
               } catch (err) {
                 setError(err instanceof Error ? err.message : '登录失败');
               }
@@ -89,6 +104,153 @@ function LoginPage() {
           </button>
         </p>
       </div>
+    </div>
+  );
+}
+
+const SCENE_LABELS: Record<string, string> = {
+  winback_dormant: '沉睡未复购',
+  repurchase: '到了复购窗口',
+  first_to_second: '首单还没转二单',
+  abandoned_checkout: '弃购还没挽回',
+};
+
+function OverviewPage() {
+  const [data, setData] = useState<Overview | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    api.overview().then(setData).catch((err) => setError(err instanceof Error ? err.message : '总览加载失败'));
+  }, []);
+  if (error) return <p className="danger">{error}</p>;
+  if (!data) return <p>加载中…</p>;
+  const sceneMax = Math.max(...data.scenes.map((scene) => scene.total ?? 0), 1);
+  return (
+    <div>
+      <h2>客户总览</h2>
+      <div className="stat-grid">
+        <div className="card">
+          <span className="muted">客户总数</span>
+          <strong>{data.total}</strong>
+        </div>
+        <div className="card">
+          <span className="muted">资料齐全</span>
+          <strong>{data.addressable}</strong>
+        </div>
+        <div className="card">
+          <span className="muted">未同意营销</span>
+          <strong>{data.noConsent}</strong>
+        </div>
+        <div className="card">
+          <span className="muted">缺姓名或国家</span>
+          <strong>{data.incomplete}</strong>
+        </div>
+      </div>
+      <div className="card">
+        <h3>按购买情况</h3>
+        <p className="muted">
+          条的全长是符合这个分类的人数，深色是其中可以发信的人。缺姓名或国家的人不进入这些分类，也不会生成邮件。
+        </p>
+        <div className="bars">
+          {data.scenes.map((scene) => {
+            const total = scene.total ?? 0;
+            const reachable = scene.reachable ?? 0;
+            const track = scene.missingAbandoned ? 0 : Math.max(Math.round((total / sceneMax) * 100), total > 0 ? 4 : 0);
+            const reach = total > 0 ? Math.round((reachable / total) * 100) : 0;
+            return (
+              <div className="bar-row" key={scene.scenario}>
+                <span>{SCENE_LABELS[scene.scenario] || scene.scenario}</span>
+                <div className="bar-track" aria-hidden="true">
+                  <div className="bar-fill soft" style={{ width: `${track}%` }}>
+                    <div className="bar-fill" style={{ width: `${reach}%` }} />
+                  </div>
+                </div>
+                <span className="bar-count">
+                  {scene.missingAbandoned ? '还没有弃单' : `${total} 人，可发 ${reachable}`}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        <p className="muted">
+          资料齐全的人里，英语 {data.languages.en}，西班牙语 {data.languages.es}。未同意营销的 {data.noConsent} 人会留在名单里，但不生成邮件。
+        </p>
+      </div>
+      <div className="card">
+        <h3>什么叫个性推广</h3>
+        <p>
+          买过至少 2 次，或者已经确认过事实的人，单独写一封。这封信要能看出这个人的商品、距今天数、品类，以及已确认的事实。
+        </p>
+        <p>
+          只买过 1 次、又没有已确认事实的人，按语言、国家、场景、消费层级和主要品类分组，共用一封底稿。复制或发送时，才填上这个人自己的姓名和上次商品。
+        </p>
+        <p className="muted">中文推广意图不会原样贴进外语正文。有折扣码时，优惠句写 20% off。</p>
+      </div>
+      <FieldGuide />
+    </div>
+  );
+}
+
+function FieldGuide() {
+  return (
+    <div className="card">
+      <h3>这些字段怎么算</h3>
+      <p className="muted">金额只加已付款订单。弃单里的商品和金额不计入消费，也不算购买次数。</p>
+      <table>
+        <tbody>
+          <tr>
+            <th>消费金额</th>
+            <td>已付款订单金额加总。没有已付款订单就是 0 美元。</td>
+          </tr>
+          <tr>
+            <th>消费层级</th>
+            <td>
+              这三档是产品初稿里写死的分界，不是用这家店的订单分布算出来的。不少于 120 美元是高，不少于 50 美元且少于 120 美元是中，少于 50 美元是低。正好 120 美元算高，正好 50 美元算中。程序按「分」保存，120 美元就是 12000 分。
+            </td>
+          </tr>
+          <tr>
+            <th>主要品类</th>
+            <td>
+              已付款商品里出现最多的一类。标题含 litter 或 arena 算猫砂；含 dog 算狗粮；还没归到这两类、且含 chew、toy 或 catnip 的算零食玩具；其余算猫粮。没有已付款商品就是「还没有」。
+            </td>
+          </tr>
+          <tr>
+            <th>购买次数</th>
+            <td>已付款订单的笔数。同一张订单的多行商品算一笔。</td>
+          </tr>
+          <tr>
+            <th>距上次购买</th>
+            <td>最近一笔已付款订单到店铺「今天」的天数。现在店铺里的今天是 2026-11-01。没有已付款订单就不计算。</td>
+          </tr>
+          <tr>
+            <th>语言</th>
+            <td>标签里有 lang:es 用西班牙语，有 lang:en 用英语。没有这类标签时，国家是 MX、ES、AR、CO、CL、PE 用西班牙语，其余用英语。销售在档案里改过的语言会记住，再次导入不覆盖。</td>
+          </tr>
+          <tr>
+            <th>国家</th>
+            <td>客户表的国家代码，认 Default Address Country Code 或 Country。名和姓都空，或国家为空的人不能发信。</td>
+          </tr>
+          <tr>
+            <th>营销同意</th>
+            <td>客户表 Accepts Email Marketing 是 yes、true 或 1，才算同意。未同意的人留在名单里，不生成、不发送。</td>
+          </tr>
+          <tr>
+            <th>沉睡未复购</th>
+            <td>最后一次已付款距今不少于 60 天。</td>
+          </tr>
+          <tr>
+            <th>到了复购窗口</th>
+            <td>最近一次该品类购买距今落在周期上下 7 天。猫砂 21 天，猫粮和狗粮 30 天，零食玩具 14 天。</td>
+          </tr>
+          <tr>
+            <th>首单还没转二单</th>
+            <td>正好 1 笔已付款，且距今 7 到 30 天。</td>
+          </tr>
+          <tr>
+            <th>弃购还没挽回</th>
+            <td>弃单发生在最近 1 到 7 天，并且弃单那天之后没有已付款订单。还没上传弃单时，这里显示「还没有弃单」。</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -130,10 +292,10 @@ function CustomersPage() {
               <tr key={c.id}>
                 <td>
                   <Link to={`/customers/${c.id}`}>
-                    {c.firstName} {c.lastName}
+                    {`${c.firstName || ''} ${c.lastName || ''}`.trim() || '未填姓名'}
                   </Link>
                 </td>
-                <td>{c.country}</td>
+                <td>{c.country || '未填国家'}</td>
                 <td>{c.language === 'es' ? '西班牙语' : '英语'}</td>
                 <td>{c.orderCount}</td>
                 <td>{c.daysSinceLastOrder ?? '-'}</td>
@@ -151,12 +313,11 @@ function CustomersPage() {
 function CustomerPage() {
   const { id } = useParams();
   const [data, setData] = useState<CustomerDetail | null>(null);
-  const [text, setText] = useState('');
-  const [tag, setTag] = useState('');
-  const [tagError, setTagError] = useState('');
-  const [noteError, setNoteError] = useState('');
-  const [warn, setWarn] = useState<string[]>([]);
-  const load = () => id && api.customer(id).then(setData);
+  const [languageError, setLanguageError] = useState('');
+  const load = async () => {
+    if (!id) return;
+    setData(await api.customer(id));
+  };
   useEffect(() => {
     load();
   }, [id]);
@@ -172,7 +333,27 @@ function CustomerPage() {
           <tbody>
             <tr>
               <th>语言</th>
-              <td>{data.language === 'es' ? '西班牙语' : '英语'}</td>
+              <td>
+                <select
+                  value={data.language === 'es' ? 'es' : 'en'}
+                  style={{ width: 160 }}
+                  onChange={async (event) => {
+                    if (!id) return;
+                    const language = event.target.value === 'es' ? 'es' : 'en';
+                    setLanguageError('');
+                    try {
+                      await api.updateLanguage(id, language);
+                      load();
+                    } catch (err) {
+                      setLanguageError(err instanceof Error ? err.message : '语言没有保存');
+                    }
+                  }}
+                >
+                  <option value="en">英语</option>
+                  <option value="es">西班牙语</option>
+                </select>
+                {languageError && <p className="danger">{languageError}</p>}
+              </td>
             </tr>
             <tr>
               <th>国家</th>
@@ -188,7 +369,7 @@ function CustomerPage() {
             </tr>
             <tr>
               <th>消费层级</th>
-              <td>{data.spendTier === 'high' ? '高' : data.spendTier === 'mid' ? '中' : '低'}</td>
+              <td>{spendTierText(data.spendTier)}</td>
             </tr>
             <tr>
               <th>主要品类</th>
@@ -202,59 +383,8 @@ function CustomerPage() {
               <th>营销同意</th>
               <td>{data.emailConsent ? '同意接收邮件' : '未同意，不会生成文案'}</td>
             </tr>
-            <tr>
-              <th>偏好标签</th>
-              <td>
-                {(data.preferenceTags || []).length === 0
-                  ? '还没有'
-                  : data.preferenceTags.map((item) => (
-                      <span key={item} className="tag">
-                        {item}
-                      </span>
-                    ))}
-              </td>
-            </tr>
           </tbody>
         </table>
-        <label>添加偏好标签</label>
-        <div className="row">
-          <input
-            value={tag}
-            onChange={(e) => {
-              setTag(e.target.value);
-              setTagError('');
-            }}
-            placeholder="例如：布偶猫"
-          />
-          <button
-            className="btn"
-            onClick={async () => {
-              const value = tag.trim();
-              if (!id || !value) {
-                setTagError('标签不能为空');
-                return;
-              }
-              if (value.length > 40) {
-                setTagError('标签最多 40 个字');
-                return;
-              }
-              try {
-                await api.addTag(id, value);
-                setTag('');
-                setTagError('');
-                load();
-              } catch (err) {
-                const message = err instanceof Error ? err.message : '';
-                setTagError(
-                  message.includes('标签') ? message : '网络失败，标签没有保存。请确认后端已启动后再试。',
-                );
-              }
-            }}
-          >
-            添加标签
-          </button>
-        </div>
-        {tagError && <p className="danger">{tagError}</p>}
       </div>
       <div className="card">
         <h3>订单</h3>
@@ -266,75 +396,505 @@ function CustomerPage() {
       </div>
       <div className="card">
         <h3>备注</h3>
+        {data.notes.length === 0 && <p className="muted">还没有备注</p>}
         {data.notes.map((n) => (
           <p key={n.id}>{n.text}</p>
         ))}
-        {warn.length > 0 && (
-          <p className="warn">备注中包含{warn.map(privacyLabel).join('、')}，发给 AI 前会自动隐藏</p>
-        )}
-        <textarea
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            setNoteError('');
-          }}
-          rows={3}
-        />
-        {noteError && <p className="danger">{noteError}</p>}
+      </div>
+      <div className="card">
+        <h3>事实</h3>
+        <p className="muted">只有已确认的事实会写进信。商品标题和聊天原话需要先确认。</p>
+        {(data.facts || []).length === 0 && <p className="muted">还没有事实</p>}
+        {(data.facts || []).map((fact) => (
+          <p key={fact.id}>
+            <span className="tag">{factStatus(fact.status)}</span>
+            <span className="tag">{factKind(fact.kind)}</span>
+            {fact.quote}
+            {fact.status === 'suggested' && (
+              <span className="row">
+                <button
+                  className="btn"
+                  onClick={async () => {
+                    await api.decideFact(fact.id, 'confirm');
+                    await load();
+                  }}
+                >
+                  确认
+                </button>
+                <button
+                  className="btn secondary"
+                  onClick={async () => {
+                    await api.decideFact(fact.id, 'dismiss');
+                    await load();
+                  }}
+                >
+                  忽略
+                </button>
+              </span>
+            )}
+          </p>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StorePage() {
+  const [address, setAddress] = useState('');
+  const [saved, setSaved] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    api.store().then((store) => {
+      setAddress(store.companyAddress);
+      setSaved(store.companyAddress);
+    });
+  }, []);
+  return (
+    <div>
+      <h2>店铺</h2>
+      <div className="card">
+        <label>公司地址</label>
+        <input value={address} onChange={(event) => setAddress(event.target.value)} />
+        <p className="muted">复制和模拟发送时，信的底部使用这个地址。</p>
         <p>
           <button
             className="btn"
+            disabled={busy || !address.trim()}
             onClick={async () => {
-              if (!id || !text.trim()) {
-                setNoteError('备注不能为空');
-                return;
-              }
+              setBusy(true);
+              setError('');
               try {
-                const res = await api.addNote(id, text);
-                setWarn(res.privacyWarnings);
-                setText('');
-                setNoteError('');
-                load();
+                const next = await api.updateAddress(address.trim());
+                setAddress(next.companyAddress);
+                setSaved(next.companyAddress);
               } catch (err) {
-                setNoteError(err instanceof Error ? err.message : '备注没有保存。请确认后端已启动后再试。');
+                setError(err instanceof Error ? err.message : '地址没有保存');
+              } finally {
+                setBusy(false);
               }
             }}
           >
-            添加备注
+            保存地址
           </button>
         </p>
+        {saved && <p className="muted">当前地址：{saved}</p>}
+        {error && <p className="danger">{error}</p>}
       </div>
+    </div>
+  );
+}
+
+function readFile(file: File) {
+  return file.text();
+}
+
+function ClearImports() {
+  const [confirming, setConfirming] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="card">
+      <h3>清除导入的数据</h3>
+      <p>
+        导入只会按邮箱新增或更新，不会删掉这份文件里没有的旧客户。所以上次缺姓名、缺国家的人会一直留在店里，页面上也没有逐个删除。
+      </p>
+      <p className="muted">清除会删掉本店的客户、订单、弃单、聊天事实和已经写好的推广。登录账号和公司地址保留。</p>
+      {confirming ? (
+        <div className="row">
+          <button
+            className="btn danger"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              setError('');
+              try {
+                const saved = await api.clearImports();
+                setMessage(`已清除 ${saved.customers} 位客户、${saved.orders} 笔订单、${saved.checkouts} 张弃单。`);
+                setConfirming(false);
+              } catch (err) {
+                setError(err instanceof Error ? err.message : '清除失败');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            确认清除
+          </button>
+          <button className="btn secondary" disabled={busy} onClick={() => setConfirming(false)}>
+            取消
+          </button>
+        </div>
+      ) : (
+        <p>
+          <button className="btn danger" onClick={() => setConfirming(true)}>
+            清除本店数据
+          </button>
+        </p>
+      )}
+      {message && <p>{message}</p>}
+      {error && <p className="danger">{error}</p>}
+    </div>
+  );
+}
+
+function ImportPage() {
+  const [customersFile, setCustomersFile] = useState<File | null>(null);
+  const [ordersFile, setOrdersFile] = useState<File | null>(null);
+  const [customersCsv, setCustomersCsv] = useState('');
+  const [ordersCsv, setOrdersCsv] = useState('');
+  const [preview, setPreview] = useState<ImportPreview | null>(null);
+  const [beforeCount, setBeforeCount] = useState<number | null>(null);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <div>
+      <h2>导入</h2>
+      <ClearImports />
+      <div className="card">
+        <p className="muted">先预览。确认之前不会写入客户和订单。</p>
+        <p>
+          客户 CSV 和订单 CSV 要一起上传。两份文件用邮箱自动对应，不看列的左右位置，但列名要能认出。客户表提供是谁、哪个国家、是否同意收信、备注。订单表提供买了什么、什么时候买。只上传其中一个不够：没有客户表就不知道姓名和营销同意，没有订单表就分不出沉睡、复购和上次商品。
+        </p>
+        <p className="muted">
+          没有邮箱、没有姓名（名和姓都空），或没有国家的行会跳过。这些行不写入，也不能发信。国家列认 Default Address Country Code 或 Country。
+        </p>
+        <label>客户 CSV</label>
+        <input
+          type="file"
+          accept=".csv,text/csv"
+          onChange={(event) => {
+            setCustomersFile(event.target.files?.[0] ?? null);
+            setPreview(null);
+            setMessage('');
+          }}
+        />
+        <label>订单 CSV</label>
+        <input
+          type="file"
+          accept=".csv,text/csv"
+          onChange={(event) => {
+            setOrdersFile(event.target.files?.[0] ?? null);
+            setPreview(null);
+            setMessage('');
+          }}
+        />
+        <p>
+          <button
+            className="btn secondary"
+            disabled={busy || !customersFile || !ordersFile}
+            onClick={async () => {
+              if (!customersFile || !ordersFile) return;
+              setBusy(true);
+              setError('');
+              setMessage('');
+              try {
+                const [customersText, ordersText] = await Promise.all([readFile(customersFile), readFile(ordersFile)]);
+                const current = await api.customers();
+                const next = await api.previewImport(customersText, ordersText);
+                const after = await api.customers();
+                setCustomersCsv(customersText);
+                setOrdersCsv(ordersText);
+                setPreview(next);
+                setBeforeCount(current.total);
+                if (after.total !== current.total) {
+                  setError('预览改动了客户人数，请先不要确认。');
+                }
+              } catch (err) {
+                setPreview(null);
+                setError(err instanceof Error ? err.message : '预览失败');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            预览
+          </button>
+        </p>
+        {preview && (
+          <div>
+            <p>
+              可导入客户 {preview.customers} 人，跳过 {preview.skippedCustomers} 行（没有邮箱、姓名或国家）。其中西班牙语{' '}
+              {preview.spanish} 人，备注 {preview.notes} 条。订单 {preview.orders} 笔
+              {preview.unmatchedOrders > 0 ? `，其中 ${preview.unmatchedOrders} 笔对不上这次能导入的客户` : ''}。
+            </p>
+            <p className="muted">当前客户列表仍是 {beforeCount ?? preview.storeCustomers} 人，还没有写入。</p>
+            <p>
+              <button
+                className="btn"
+                disabled={busy || !customersCsv || !ordersCsv}
+                onClick={async () => {
+                  setBusy(true);
+                  setError('');
+                  try {
+                    const saved = await api.confirmImport(customersCsv, ordersCsv);
+                    setMessage(
+                      `已导入。店里现在 ${saved.customers} 人，西班牙语 ${saved.spanish} 人，订单 ${saved.orders} 笔。这次跳过 ${saved.skippedCustomers} 行。`,
+                    );
+                    setPreview(null);
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : '导入失败');
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                确认导入
+              </button>
+            </p>
+          </div>
+        )}
+        {message && <p>{message}</p>}
+        {error && <p className="danger">{error}</p>}
+      </div>
+      <AbandonedImport />
+      <GorgiasImport />
+    </div>
+  );
+}
+
+function AbandonedImport() {
+  const [fileText, setFileText] = useState('');
+  const [preview, setPreview] = useState<AbandonedPreview | null>(null);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="card">
+      <h3>弃单 CSV</h3>
+      <p className="muted">
+        列名用 Shopify 弃单导出：Email、Created at、Lineitem name。同一张弃单的每一行商品共用一个 Id。还可以有 Name 和 Lineitem quantity。
+      </p>
+      <input
+        type="file"
+        accept=".csv,text/csv"
+        onChange={async (event) => {
+          const file = event.target.files?.[0];
+          setPreview(null);
+          setMessage('');
+          setFileText(file ? await file.text() : '');
+        }}
+      />
+      <p>
+        <button
+          className="btn secondary"
+          disabled={busy || !fileText}
+          onClick={async () => {
+            setBusy(true);
+            setError('');
+            try {
+              const before = await api.previewAbandoned(fileText);
+              const after = await api.previewAbandoned(fileText);
+              if (before.storeCheckouts !== after.storeCheckouts) {
+                setError('预览改动了弃单，请先不要确认。');
+                return;
+              }
+              setPreview(before);
+            } catch (err) {
+              setError(err instanceof Error ? err.message : '预览失败');
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          预览弃单
+        </button>
+      </p>
+      {preview && (
+        <div>
+          <p>
+            弃单 {preview.checkouts} 张，对得上客户 {preview.matched} 张，对不上 {preview.unmatched} 张。当前账本里的弃单还是{' '}
+            {preview.storeCheckouts} 张。
+          </p>
+          <button
+            className="btn"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              setError('');
+              try {
+                const saved = await api.confirmAbandoned(fileText);
+                setMessage(`已导入弃单 ${saved.checkouts} 张，对得上 ${saved.matched} 张，对不上 ${saved.unmatched} 张。`);
+                setPreview(null);
+              } catch (err) {
+                setError(err instanceof Error ? err.message : '导入失败');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            确认导入弃单
+          </button>
+        </div>
+      )}
+      {message && <p>{message}</p>}
+      {error && <p className="danger">{error}</p>}
+    </div>
+  );
+}
+
+function GorgiasImport() {
+  const [fileText, setFileText] = useState('');
+  const [preview, setPreview] = useState<GorgiasPreview | null>(null);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="card">
+      <h3>Gorgias 聊天</h3>
+      <p className="muted">
+        这一版只读「Export with message content」里的 Customer email 和 Message text。对不上客户的行不会挂到别人身上。没有 DeepSeek 钥匙时不猜测是偏好还是需要小心的事。
+      </p>
+      <input
+        type="file"
+        accept=".csv,text/csv"
+        onChange={async (event) => {
+          const file = event.target.files?.[0];
+          setPreview(null);
+          setMessage('');
+          setFileText(file ? await file.text() : '');
+        }}
+      />
+      <p>
+        <button
+          className="btn secondary"
+          disabled={busy || !fileText}
+          onClick={async () => {
+            setBusy(true);
+            setError('');
+            try {
+              setPreview(await api.previewGorgias(fileText));
+            } catch (err) {
+              setError(err instanceof Error ? err.message : '预览失败');
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          预览聊天
+        </button>
+      </p>
+      {preview && (
+        <div>
+          <p>
+            有正文 {preview.withText} 行，对得上 {preview.matched} 行，对不上 {preview.unmatched} 行，空正文 {preview.skipped} 行。
+          </p>
+          <button
+            className="btn"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              setError('');
+              try {
+                const saved = await api.confirmGorgias(fileText);
+                setMessage(`已导入。新事实 ${saved.created} 条，对不上 ${saved.unmatched} 行，空正文 ${saved.skipped} 行。`);
+                setPreview(null);
+              } catch (err) {
+                setError(err instanceof Error ? err.message : '导入失败');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            确认导入聊天
+          </button>
+        </div>
+      )}
+      {message && <p>{message}</p>}
+      {error && <p className="danger">{error}</p>}
     </div>
   );
 }
 
 function AudiencePage() {
   const nav = useNavigate();
-  const [scenario, setScenario] = useState<'winback_dormant' | 'all'>('winback_dormant');
+  const [scenario, setScenario] = useState<'winback_dormant' | 'repurchase' | 'first_to_second' | 'abandoned_checkout'>(
+    'winback_dormant',
+  );
+  const [language, setLanguage] = useState('');
+  const [category, setCategory] = useState('');
+  const [spendTier, setSpendTier] = useState('');
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [removed, setRemoved] = useState<string[]>([]);
   const [intent, setIntent] = useState('黑五老客专享 8 折，主推猫砂和猫粮，强调囤货划算');
   const [code, setCode] = useState('SAVE20');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const refresh = () => api.preview({ scenario }).then(setPreview);
   useEffect(() => {
-    refresh();
-  }, [scenario]);
+    setRemoved([]);
+    const body: Record<string, string> = { scenario };
+    if (language) body.language = language;
+    if (category) body.category = category;
+    if (spendTier) body.spendTier = spendTier;
+    api.preview(body).then(setPreview).catch((err) => setError(err instanceof Error ? err.message : '挑选失败'));
+  }, [scenario, language, category, spendTier]);
+  const chosen = (preview?.items || []).filter((item) => !removed.includes(item.id));
   return (
     <div>
       <h2>挑选客户</h2>
       <div className="card">
         <label>场景</label>
-        <select value={scenario} onChange={(e) => setScenario(e.target.value as 'winback_dormant' | 'all')}>
+        <select value={scenario} onChange={(e) => setScenario(e.target.value as typeof scenario)}>
           <option value="winback_dormant">沉睡召回（60 天以上未购买）</option>
-          <option value="all">全部客户</option>
+          <option value="repurchase">复购提醒</option>
+          <option value="first_to_second">首单转二单</option>
+          <option value="abandoned_checkout">弃购挽回</option>
         </select>
-        {preview && (
+        <div className="row">
+          <select value={language} onChange={(e) => setLanguage(e.target.value)}>
+            <option value="">全部语言</option>
+            <option value="en">英语</option>
+            <option value="es">西班牙语</option>
+          </select>
+          <select value={category} onChange={(e) => setCategory(e.target.value)}>
+            <option value="">全部品类</option>
+            <option value="cat_litter">猫砂</option>
+            <option value="cat_food">猫粮</option>
+            <option value="dog_food">狗粮</option>
+            <option value="treats">零食玩具</option>
+          </select>
+          <select value={spendTier} onChange={(e) => setSpendTier(e.target.value)}>
+            <option value="">全部消费层级</option>
+            <option value="high">高：累计不少于 120 美元</option>
+            <option value="mid">中：累计不少于 50 美元、少于 120 美元</option>
+            <option value="low">低：累计少于 50 美元</option>
+          </select>
+        </div>
+        {preview?.missingAbandoned && <p>还没有弃单数据</p>}
+        {preview && !preview.missingAbandoned && (
           <p>
             共 {preview.total} 人，可触达 {preview.reachable} 人，排除 {preview.excluded} 人（未同意营销）。英语{' '}
-            {preview.languages.en}，西班牙语 {preview.languages.es}。逐个定制 {preview.personalized}，小群方式{' '}
-            {preview.cohort}。
+            {preview.languages.en}，西班牙语 {preview.languages.es}。单独写 {preview.personalized} 人，共用{' '}
+            {preview.cohortGroups} 组，调用 {preview.calls} 次。
+            {preview.costConfigured
+              ? `单价 ${preview.unitPriceCents} 分，费用 ${preview.costCents} 分。`
+              : '费用还没配置。'}
           </p>
+        )}
+        <p className="muted">
+          个性推广指：买过至少 2 次，或已有确认事实的人单独写，信里写出商品、天数、品类和已确认事实。其余人共用一封底稿，复制时才填上各人的姓名和上次商品。没有姓名或国家的客户不会出现在这个名单里。
+        </p>
+        {preview && !preview.missingAbandoned && (
+          <div style={{ maxHeight: 280, overflow: 'auto' }}>
+            {preview.items.map((item) => (
+              <label key={item.id} style={{ display: 'block' }}>
+                <input
+                  type="checkbox"
+                  checked={!removed.includes(item.id)}
+                  onChange={() =>
+                    setRemoved((current) =>
+                      current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id],
+                    )
+                  }
+                />{' '}
+                {item.firstName} {item.lastName}
+                {item.eligible ? '' : ' · 不生成'}
+              </label>
+            ))}
+          </div>
         )}
         <label>推广意图（中文）</label>
         <textarea value={intent} onChange={(e) => setIntent(e.target.value)} rows={3} />
@@ -343,7 +903,7 @@ function AudiencePage() {
         <p>
           <button
             className="btn"
-            disabled={busy || !intent.trim()}
+            disabled={busy || !intent.trim() || preview?.missingAbandoned || chosen.length === 0}
             onClick={async () => {
               setBusy(true);
               setError('');
@@ -352,9 +912,13 @@ function AudiencePage() {
                   scenario,
                   intentZh: intent.trim(),
                   discountCode: code.trim(),
+                  customerIds: chosen.map((item) => item.id),
+                  ...(language ? { language } : {}),
+                  ...(category ? { category } : {}),
+                  ...(spendTier ? { spendTier } : {}),
                 });
-                const generated = await api.generate(created.id);
-                nav(`/outreach/${generated.id}`);
+                await api.generate(created.id);
+                nav(`/outreach/${created.id}`);
               } catch (err) {
                 setError(err instanceof Error ? err.message : '生成失败。请确认后端已启动后再试。');
               } finally {
@@ -362,7 +926,7 @@ function AudiencePage() {
               }
             }}
           >
-            {busy ? '正在为客户生成文案…' : '开始生成'}
+            {busy ? '正在开始写信…' : '开始生成'}
           </button>
         </p>
         {error && <p className="danger">{error}</p>}
@@ -390,7 +954,7 @@ function OutreachListPage() {
             <Link to={`/outreach/${item.id}`}>{item.name}</Link>
             <span className="muted">
               {' '}
-              · {statusLabel(item.status)} · {item.intentZh}
+              · {progressLabel(item.status, item.job)} · {item.intentZh}
             </span>
           </p>
         ))}
@@ -408,25 +972,52 @@ function OutreachPage() {
   const [copied, setCopied] = useState('');
   const [rendered, setRendered] = useState<{ subject: string; body: string } | null>(null);
   const [message, setMessage] = useState('');
+  const currentId = current?.id;
   const load = () =>
     id &&
     api.getOutreach(id).then((d) => {
       setData(d);
-      const next = d.drafts.find((x) => x.id === current?.id) || d.drafts[0] || null;
+      const next = d.drafts.find((x) => x.id === currentId) || d.drafts[0] || null;
       setCurrent(next);
-      setBody(next?.body || '');
+      if (!currentId || next?.id !== currentId) setBody(next?.body || '');
     });
   useEffect(() => {
-    load();
+    if (!id) return;
+    let timer = 0;
+    let stop = false;
+    const tick = () => {
+      api.getOutreach(id).then((d) => {
+        if (stop) return;
+        setData(d);
+        setCurrent((prev) => {
+          const next = d.drafts.find((item) => item.id === prev?.id) || d.drafts[0] || null;
+          if (!prev || prev.id !== next?.id) setBody(next?.body || '');
+          return next;
+        });
+        if (d.job?.status === 'writing') timer = window.setTimeout(tick, 800);
+      });
+    };
+    tick();
+    return () => {
+      stop = true;
+      window.clearTimeout(timer);
+    };
   }, [id]);
   if (!data) return <p>加载中…</p>;
   return (
     <div>
       <h2>
-        {data.name} · {statusLabel(data.status)}
+        {data.name} · {progressLabel(data.status, data.job)}
       </h2>
       <p className="muted">{data.intentZh}</p>
       <div className="banner">模拟发送 · 可触达 {data.reachable} · 排除 {data.excluded}</div>
+      {data.job && (
+        <div className="banner">
+          计划 {data.job.plannedCount} 封，已写完 {data.job.completedCount} 封
+          {data.job.nextCustomerName ? `，还没写的从 ${data.job.nextCustomerName} 开始` : ''}，失败 {data.job.failedCount}{' '}
+          封
+        </div>
+      )}
       <div className="row">
         <button
           className="btn"
@@ -450,6 +1041,19 @@ function OutreachPage() {
         >
           模拟发送
         </button>
+        {data.job && data.job.status !== 'writing' && (data.job.status === 'interrupted' || data.job.failedCount > 0 || data.job.completedCount < data.job.plannedCount) && (
+          <button
+            className="btn secondary"
+            onClick={async () => {
+              if (!id) return;
+              await api.continueGeneration(id);
+              setMessage('继续写剩下的');
+              load();
+            }}
+          >
+            继续写剩下的
+          </button>
+        )}
       </div>
       {message && <p>{message}</p>}
       <div className="split" style={{ marginTop: 16 }}>
@@ -479,6 +1083,11 @@ function OutreachPage() {
             <h3>
               {current.firstName} {current.lastName}
             </h3>
+            <p className="muted">
+              {current.mode === 'personalized'
+                ? '这封是单独写的。正文里应能看出这个人的商品、天数或已确认事实。'
+                : '这封和同一群人共用底稿。上面仍是占位符，复制后才会变成这个人的姓名和上次商品。'}
+            </p>
             {current.personalizationPoints.map((p) => (
               <span key={p} className="tag">
                 {p}
@@ -520,7 +1129,7 @@ function OutreachPage() {
                 onClick={async () => {
                   try {
                     await api.updateDraft(current.id, body);
-                    await api.reviewDraft(current.id, 'approve');
+                    await api.reviewDraft(current.id);
                     setMessage('这份文案已通过');
                     load();
                   } catch (err) {
@@ -529,6 +1138,21 @@ function OutreachPage() {
                 }}
               >
                 {current.status === 'approved' ? '已通过' : '通过'}
+              </button>
+              <button
+                className="btn secondary"
+                onClick={async () => {
+                  try {
+                    const next = await api.regenerateDraft(current.id);
+                    setMessage(next.writer === 'template' ? '这一封已用信纸重写' : '这一封已重新生成');
+                    setBody(next.body);
+                    load();
+                  } catch (err) {
+                    setMessage(err instanceof Error ? err.message : '无法重写');
+                  }
+                }}
+              >
+                重新生成这一封
               </button>
               <button
                 className="btn secondary"
@@ -567,6 +1191,12 @@ function OutreachPage() {
   );
 }
 
+function spendTierText(tier: string) {
+  if (tier === 'high') return '高，已付款累计不少于 120 美元';
+  if (tier === 'mid') return '中，已付款累计不少于 50 美元、少于 120 美元';
+  return '低，已付款累计少于 50 美元';
+}
+
 function categoryLabel(category: string | null) {
   if (category === 'cat_litter') return '猫砂';
   if (category === 'cat_food') return '猫粮';
@@ -576,14 +1206,7 @@ function categoryLabel(category: string | null) {
 }
 
 function localBlockers(body: string) {
-  const issues: string[] = [];
-  if (!body.includes('{{unsubscribe_url}}')) {
-    issues.push('文案里必须保留 {{unsubscribe_url}}，否则不能通过');
-  }
-  if (!body.includes('{{company_address}}')) {
-    issues.push('文案里必须保留 {{company_address}}，否则不能通过');
-  }
-  return issues;
+  return draftIssues(body).map((issue) => issue.message);
 }
 
 function statusLabel(status: string) {
@@ -596,10 +1219,23 @@ function statusLabel(status: string) {
   return status;
 }
 
-function privacyLabel(code: string) {
-  if (code === 'email') return '邮箱';
-  if (code === 'phone') return '电话';
-  return code;
+function factStatus(status: string) {
+  if (status === 'confirmed') return '已确认';
+  return '待确认';
+}
+
+function factKind(kind: string) {
+  if (kind === 'caution') return '需要小心的事';
+  if (kind === 'preference') return '偏好';
+  return '还没分类';
+}
+
+function progressLabel(status: string, job: GenerationJob | null) {
+  if (status === 'sent') return '已发送';
+  if (job?.status === 'writing') return '正在写';
+  if (job?.status === 'done') return '已写完';
+  if (job?.status === 'interrupted') return '中途停下';
+  return statusLabel(status);
 }
 
 function Guard({ children }: { children: ReactNode }) {
@@ -614,6 +1250,14 @@ export function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route
+        path="/"
+        element={
+          <Guard>
+            <OverviewPage />
+          </Guard>
+        }
+      />
+      <Route
         path="/customers"
         element={
           <Guard>
@@ -626,6 +1270,22 @@ export function App() {
         element={
           <Guard>
             <CustomerPage />
+          </Guard>
+        }
+      />
+      <Route
+        path="/import"
+        element={
+          <Guard>
+            <ImportPage />
+          </Guard>
+        }
+      />
+      <Route
+        path="/store"
+        element={
+          <Guard>
+            <StorePage />
           </Guard>
         }
       />
@@ -653,7 +1313,6 @@ export function App() {
           </Guard>
         }
       />
-      <Route path="/" element={<Navigate to="/customers" replace />} />
     </Routes>
   );
 }

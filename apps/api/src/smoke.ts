@@ -52,18 +52,33 @@ const listed = await call('GET', '/api/v1/outreach', undefined, cookie);
 const row = listed.body.items.find((item: { id: string }) => item.id === created.body.id);
 if (!row?.intentZh || row.intent_zh) throw new Error('outreach list is not camelCase');
 
-const generated = await call('POST', `/api/v1/outreach/${created.body.id}/generate`, {}, cookie);
-if (generated.body.drafts.length !== 27) throw new Error(`drafts ${generated.body.drafts.length}`);
-const langs = new Set(generated.body.drafts.map((d: { language: string }) => d.language));
-if (!langs.has('en') || !langs.has('es')) throw new Error('missing languages');
-const texts = generated.body.drafts.map((d: { body: string }) => d.body);
-if (new Set(texts).size < 5) throw new Error('drafts too similar');
-const annaDraft = generated.body.drafts.find((d: { email: string }) => d.email === 'anna.cole@example.com');
-if (!annaDraft) throw new Error('anna draft missing');
-if (!String(annaDraft.zhBody).includes('备注')) throw new Error('anna chinese copy missing note');
-if (!String(annaDraft.body).includes('{{first_name}}')) throw new Error('draft should keep placeholders until render');
+const startedAt = Date.now();
+const generated = await call('POST', `/api/v1/outreach/${created.body.id}/generate`, undefined, cookie);
+if (Date.now() - startedAt > 2000) throw new Error('generate did not return immediately');
+if (generated.body.job?.status !== 'writing' && generated.body.job?.status !== 'done') {
+  throw new Error(`job status ${generated.body.job?.status}`);
+}
 
-const blocked = generated.body.drafts[0];
+let finished = generated.body;
+const waitStarted = Date.now();
+while (finished.job?.status !== 'done') {
+  if (Date.now() - waitStarted > 30000) throw new Error(`job stayed ${finished.job?.status}`);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  finished = (await call('GET', `/api/v1/outreach/${created.body.id}`, undefined, cookie)).body;
+}
+if (finished.job.completedCount !== 27) throw new Error(`completed ${finished.job.completedCount}`);
+if (finished.drafts.length !== 27) throw new Error(`drafts ${finished.drafts.length}`);
+const langs = new Set(finished.drafts.map((d: { language: string }) => d.language));
+if (!langs.has('en') || !langs.has('es')) throw new Error('missing languages');
+const annaDraft = finished.drafts.find((d: { email: string }) => d.email === 'anna.cole@example.com');
+if (!annaDraft) throw new Error('anna draft missing');
+if (!String(annaDraft.zhBody).includes('已确认事实') && !String(annaDraft.zhBody).includes('无尘猫砂')) {
+  throw new Error('anna chinese copy missing confirmed fact');
+}
+if (!String(annaDraft.body).includes('{{first_name}}')) throw new Error('draft should keep placeholders until render');
+if (String(annaDraft.body).includes('黑五老客专享')) throw new Error('chinese intent leaked into the foreign body');
+
+const blocked = finished.drafts[0];
 const patched = await call('PATCH', `/api/v1/drafts/${blocked.id}`, { body: 'Hola {{first_name}}' }, cookie);
 if (patched.status !== 200 || patched.body.canApprove !== false) throw new Error('patched draft should not be approvable');
 const approve = await call('POST', `/api/v1/drafts/${blocked.id}/review`, { decision: 'approve' }, cookie);
@@ -91,7 +106,7 @@ if (!messages.body.items?.[0]?.renderedSubject || messages.body.items[0].rendere
 console.log('smoke ok', {
   customers: customers.body.total,
   dormant: preview.body,
-  drafts: generated.body.drafts.length,
+  drafts: finished.drafts.length,
   sent: sent.body.sent,
 });
 await app.close();

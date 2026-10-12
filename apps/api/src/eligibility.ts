@@ -14,6 +14,19 @@ function consented(customer: RecipientLike) {
   );
 }
 
+export function hasMailingIdentity(customer: {
+  firstName?: string | null;
+  lastName?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  country?: string | null;
+}) {
+  const first = (customer.firstName ?? customer.first_name ?? '').trim();
+  const last = (customer.lastName ?? customer.last_name ?? '').trim();
+  const country = (customer.country ?? '').trim();
+  return Boolean((first || last) && country);
+}
+
 export function isEmailEligible(customer: RecipientLike) {
   return consented(customer) && !customer.unsubscribedAt && !customer.unsubscribed_at;
 }
